@@ -6,12 +6,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
 // HookFiles must be set by the main package which embeds the hooks directory.
 var HookFiles embed.FS
+
+// Claude Code hook format:
+// {"matcher": "ToolName", "hooks": [{"type": "command", "command": "bash /path/to/script.sh"}]}
+type hookEntry struct {
+	Matcher string       `json:"matcher,omitempty"`
+	Hooks   []hookAction `json:"hooks"`
+}
+
+type hookAction struct {
+	Type    string `json:"type"`
+	Command string `json:"command"`
+}
 
 func Install() error {
 	home, err := os.UserHomeDir()
@@ -23,7 +34,6 @@ func Install() error {
 	hooksDir := filepath.Join(dataDir, "hooks")
 	sessionsDir := filepath.Join(dataDir, "sessions")
 
-	// Create directories
 	for _, dir := range []string{hooksDir, sessionsDir} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("cannot create %s: %w", dir, err)
@@ -52,13 +62,11 @@ func Install() error {
 		return fmt.Errorf("cannot create %s: %w", claudeDir, err)
 	}
 
-	// Read existing settings or start fresh
 	settings := make(map[string]json.RawMessage)
 	if data, err := os.ReadFile(settingsPath); err == nil {
 		if err := json.Unmarshal(data, &settings); err != nil {
 			return fmt.Errorf("cannot parse %s: %w", settingsPath, err)
 		}
-		// Backup
 		backupPath := settingsPath + ".backup"
 		if err := os.WriteFile(backupPath, data, 0644); err != nil {
 			return fmt.Errorf("cannot create backup: %w", err)
@@ -66,13 +74,12 @@ func Install() error {
 		fmt.Printf("  Backed up settings to %s\n", backupPath)
 	}
 
-	// Build the shell command depending on the OS
-	shellPrefix := shellCommand()
-	statusLineCmd := fmt.Sprintf("%s %s", shellPrefix, filepath.Join(hooksDir, "status-line.sh"))
+	// Status line command
+	statusLineCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "status-line.sh"))
 	cmdJSON, _ := json.Marshal(statusLineCmd)
 	settings["statusLineCMD"] = json.RawMessage(cmdJSON)
 
-	// Set hooks
+	// Parse existing hooks
 	var existingHooks map[string][]json.RawMessage
 	if raw, ok := settings["hooks"]; ok {
 		json.Unmarshal(raw, &existingHooks)
@@ -81,21 +88,24 @@ func Install() error {
 		existingHooks = make(map[string][]json.RawMessage)
 	}
 
-	taskHookCmd := fmt.Sprintf("%s %s", shellPrefix, filepath.Join(hooksDir, "task-hook.sh"))
+	taskHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "task-hook.sh"))
 
-	postToolHook := map[string]string{
-		"matcher": "TodoWrite",
-		"command": taskHookCmd,
+	// PostToolUse hook for TodoWrite
+	postToolHook := hookEntry{
+		Matcher: "TodoWrite",
+		Hooks:   []hookAction{{Type: "command", Command: taskHookCmd}},
 	}
 	postToolJSON, _ := json.Marshal(postToolHook)
 
-	taskCompletedHook := map[string]string{
-		"command": taskHookCmd,
+	// TaskCompleted hook
+	taskCompletedHook := hookEntry{
+		Hooks: []hookAction{{Type: "command", Command: taskHookCmd}},
 	}
 	taskCompletedJSON, _ := json.Marshal(taskCompletedHook)
 
-	sessionEndHook := map[string]string{
-		"command": taskHookCmd,
+	// SessionEnd hook
+	sessionEndHook := hookEntry{
+		Hooks: []hookAction{{Type: "command", Command: taskHookCmd}},
 	}
 	sessionEndJSON, _ := json.Marshal(sessionEndHook)
 
@@ -128,14 +138,12 @@ func Uninstall() error {
 	dataDir := filepath.Join(home, ".claude-status")
 	hooksDir := filepath.Join(dataDir, "hooks")
 
-	// Remove hooks from Claude Code settings
 	claudeDir := filepath.Join(home, ".claude")
 	settingsPath := filepath.Join(claudeDir, "settings.json")
 
 	if data, err := os.ReadFile(settingsPath); err == nil {
 		settings := make(map[string]json.RawMessage)
 		if err := json.Unmarshal(data, &settings); err == nil {
-			// Backup first
 			backupPath := settingsPath + ".backup"
 			os.WriteFile(backupPath, data, 0644)
 			fmt.Printf("  Backed up settings to %s\n", backupPath)
@@ -176,14 +184,13 @@ func Uninstall() error {
 		}
 	}
 
-	// Remove hook scripts
 	for _, name := range []string{"status-line.sh", "task-hook.sh"} {
 		path := filepath.Join(hooksDir, name)
 		if err := os.Remove(path); err == nil {
 			fmt.Printf("  Removed %s\n", path)
 		}
 	}
-	os.Remove(hooksDir) // remove dir if empty
+	os.Remove(hooksDir)
 
 	fmt.Println("\nUninstall complete. Session data preserved in ~/.claude-status/sessions/")
 	fmt.Println("To remove all data: rm -rf ~/.claude-status")
@@ -191,36 +198,66 @@ func Uninstall() error {
 	return nil
 }
 
-func shellCommand() string {
-	if runtime.GOOS == "windows" {
-		// On Windows, Claude Code runs in WSL or Git Bash — both have bash available
-		return "bash"
-	}
-	return "bash"
-}
-
+// appendIfNotPresent checks if a hook with the same command already exists.
+// Handles both old format {"command": "..."} and new format {"hooks": [{"command": "..."}]}
 func appendIfNotPresent(existing []json.RawMessage, newHook json.RawMessage, cmdCheck string) []json.RawMessage {
 	for _, raw := range existing {
-		var h map[string]string
-		if err := json.Unmarshal(raw, &h); err == nil {
-			if h["command"] == cmdCheck {
-				return existing
-			}
+		if containsCommand(raw, cmdCheck) {
+			return existing
 		}
 	}
 	return append(existing, newHook)
 }
 
+// removeHooksByCommand removes entries containing the given path fragment.
+// Handles both old and new hook formats.
 func removeHooksByCommand(hooks []json.RawMessage, pathFragment string) []json.RawMessage {
 	var filtered []json.RawMessage
 	for _, raw := range hooks {
-		var h map[string]string
-		if err := json.Unmarshal(raw, &h); err == nil {
-			if strings.Contains(h["command"], pathFragment) {
-				continue
-			}
+		if containsCommandFragment(raw, pathFragment) {
+			continue
 		}
 		filtered = append(filtered, raw)
 	}
 	return filtered
+}
+
+func containsCommand(raw json.RawMessage, cmd string) bool {
+	// Try new format: {"hooks": [{"command": "..."}]}
+	var entry hookEntry
+	if json.Unmarshal(raw, &entry) == nil {
+		for _, h := range entry.Hooks {
+			if h.Command == cmd {
+				return true
+			}
+		}
+	}
+	// Try old format: {"command": "..."}
+	var old map[string]string
+	if json.Unmarshal(raw, &old) == nil {
+		if old["command"] == cmd {
+			return true
+		}
+	}
+	return false
+}
+
+func containsCommandFragment(raw json.RawMessage, fragment string) bool {
+	// Try new format
+	var entry hookEntry
+	if json.Unmarshal(raw, &entry) == nil {
+		for _, h := range entry.Hooks {
+			if strings.Contains(h.Command, fragment) {
+				return true
+			}
+		}
+	}
+	// Try old format
+	var old map[string]string
+	if json.Unmarshal(raw, &old) == nil {
+		if strings.Contains(old["command"], fragment) {
+			return true
+		}
+	}
+	return false
 }
