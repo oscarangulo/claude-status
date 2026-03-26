@@ -1,9 +1,9 @@
 {
   "name": "claude-status",
-  "displayName": "Claude Status",
+  "displayName": "Claude Status Monitor",
   "description": "Real-time token usage and cost monitoring for Claude Code — see costs, tokens, cache efficiency, and task progress in your status bar",
   "version": "0.2.0",
-  "publisher": "oscarangulo",
+  "publisher": "OscarAngulo",
   "license": "MIT",
   "icon": "icon.png",
   "repository": {
