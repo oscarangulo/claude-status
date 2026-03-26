@@ -172,7 +172,7 @@ fi
 # --- Lines changed ---
 LINES_INFO=""
 if [ "$LINES_ADDED" -gt 0 ] || [ "$LINES_REMOVED" -gt 0 ]; then
-  LINES_INFO=" ${DIM}|${RST} ${GREEN}+${LINES_ADDED}${RST}${DIM}/${RST}${RED}-${LINES_REMOVED}${RST}"
+  LINES_INFO=" ${DIM}|${RST} ${GREEN}${LINES_ADDED} added${RST}${DIM},${RST} ${RED}${LINES_REMOVED} removed${RST}"
 fi
 
 # --- Burn rate display ---
@@ -180,18 +180,18 @@ BURN_DISPLAY=""
 if [ "$(echo "$BURN_RATE > 0" | bc)" -eq 1 ]; then
   BURN_VAL=$(printf "%.3f" "$BURN_RATE")
   if [ "$(echo "$BURN_RATE > 0.1" | bc)" -eq 1 ]; then
-    BURN_DISPLAY=" ${DIM}|${RST} ${RED}${BURN_VAL}/min${RST}"
+    BURN_DISPLAY=" ${DIM}(${RST}${RED}\$${BURN_VAL}/min${RST}${DIM})${RST}"
   elif [ "$(echo "$BURN_RATE > 0.05" | bc)" -eq 1 ]; then
-    BURN_DISPLAY=" ${DIM}|${RST} ${YELLOW}${BURN_VAL}/min${RST}"
+    BURN_DISPLAY=" ${DIM}(${RST}${YELLOW}\$${BURN_VAL}/min${RST}${DIM})${RST}"
   else
-    BURN_DISPLAY=" ${DIM}|${RST} ${DIM}${BURN_VAL}/min${RST}"
+    BURN_DISPLAY=" ${DIM}(\$${BURN_VAL}/min)${RST}"
   fi
 fi
 
 # --- Cache savings display ---
 SAVINGS_DISPLAY=""
 if [ "$(echo "$CACHE_SAVINGS > 0.001" | bc)" -eq 1 ]; then
-  SAVINGS_DISPLAY=" ${DIM}|${RST} ${GREEN}saved \$${CACHE_SAVINGS_DISPLAY}${RST}"
+  SAVINGS_DISPLAY=" ${DIM}|${RST} ${GREEN}Cache saved \$${CACHE_SAVINGS_DISPLAY}${RST}"
 fi
 
 # --- Current task ---
@@ -209,18 +209,18 @@ if [ -f "$LOG_FILE" ]; then
       if [ ${#TASK_SUBJECT} -gt 35 ]; then
         TASK_SUBJECT="${TASK_SUBJECT:0:32}..."
       fi
-      TASK_LINE="${MAGENTA}> ${TASK_SUBJECT}${RST} ${CYAN}\$${TASK_DELTA}${RST}"
+      TASK_LINE="${MAGENTA}Working on: ${TASK_SUBJECT}${RST} ${CYAN}(\$${TASK_DELTA} so far)${RST}"
     fi
   fi
 fi
 
-# --- Line 1: Cost, tokens, burn rate ---
+# --- Line 1: Spent, speed, time, code ---
 TOTAL_TOK=$((TOTAL_INPUT + TOTAL_OUTPUT))
-printf "%b" "${COST_DISPLAY} ${DIM}|${RST} ${WHITE}$(format_tok $TOTAL_TOK)${RST} ${DIM}(${RST}${DIM}in:${RST}$(format_tok $INPUT_TOK) ${DIM}out:${RST}$(format_tok $OUTPUT_TOK)${DIM})${RST}${BURN_DISPLAY} ${DIM}|${RST} ${DIM}${DURATION}${RST}${LINES_INFO}"
+printf "%b" "Spent ${COST_DISPLAY}${BURN_DISPLAY} ${DIM}|${RST} ${WHITE}$(format_tok $TOTAL_TOK) tokens${RST} ${DIM}(${RST}$(format_tok $INPUT_TOK) read${DIM},${RST} $(format_tok $OUTPUT_TOK) written${DIM})${RST} ${DIM}|${RST} ${DIM}${DURATION}${RST}${LINES_INFO}"
 echo
 
-# --- Line 2: Context, cache, savings ---
-printf "%b" "[${CTX_BAR}] ${BAR_COLOR}${CTX_PCT}%${RST}${CTX_WARN} ${DIM}|${RST} cache:${CACHE_COLOR}${CACHE_HIT}%${RST}${SAVINGS_DISPLAY}"
+# --- Line 2: Memory, cache reuse, savings ---
+printf "%b" "Memory [${CTX_BAR}] ${BAR_COLOR}${CTX_PCT}%${RST}${CTX_WARN} ${DIM}|${RST} ${CACHE_COLOR}${CACHE_HIT}% reused from cache${RST}${SAVINGS_DISPLAY}"
 echo
 
 # --- Line 3: Current task (if any) ---

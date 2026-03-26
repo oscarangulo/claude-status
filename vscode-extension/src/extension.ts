@@ -16,30 +16,23 @@ let watcher: fs.FSWatcher | null = null;
 let refreshInterval: NodeJS.Timeout | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
-  // Main status bar item (left side, high priority)
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBarItem.command = 'claude-status.showDetails';
   statusBarItem.name = 'Claude Status';
   context.subscriptions.push(statusBarItem);
 
-  // Second line for context/cache
   detailBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
   detailBarItem.name = 'Claude Status Detail';
   context.subscriptions.push(detailBarItem);
 
-  // Commands
   context.subscriptions.push(
     vscode.commands.registerCommand('claude-status.showDetails', showDetailsPanel),
     vscode.commands.registerCommand('claude-status.refresh', () => updateStatusBar()),
   );
 
-  // Initial update
   updateStatusBar();
-
-  // Watch session directory for changes
   startWatching();
 
-  // Fallback polling every 5s (in case watcher misses events)
   refreshInterval = setInterval(updateStatusBar, 5000);
   context.subscriptions.push({ dispose: () => {
     if (refreshInterval) { clearInterval(refreshInterval); }
@@ -50,11 +43,9 @@ export function activate(context: vscode.ExtensionContext) {
 function startWatching() {
   const dir = getSessionsDir();
   if (!fs.existsSync(dir)) {
-    // Retry in 10s if directory doesn't exist yet
     setTimeout(startWatching, 10000);
     return;
   }
-
   try {
     watcher = fs.watch(dir, (eventType, filename) => {
       if (filename && filename.endsWith('.jsonl')) {
@@ -62,15 +53,15 @@ function startWatching() {
       }
     });
   } catch {
-    // Fallback to polling only
+    // Fallback to polling
   }
 }
 
 function updateStatusBar() {
   const file = getActiveSessionFile();
   if (!file) {
-    statusBarItem.text = '$(pulse) Claude: no session';
-    statusBarItem.tooltip = 'No active Claude Code session detected.\nRun `claude-status install` to configure hooks.';
+    statusBarItem.text = '$(pulse) Claude: no active session';
+    statusBarItem.tooltip = 'Waiting for a Claude Code session.\nMake sure hooks are installed: claude-status install';
     statusBarItem.show();
     detailBarItem.hide();
     return;
@@ -85,44 +76,45 @@ function updateStatusBar() {
 
   const m = computeMetrics(session);
   if (!m) {
-    statusBarItem.text = '$(pulse) Claude: waiting...';
+    statusBarItem.text = '$(pulse) Claude: starting...';
     statusBarItem.show();
     detailBarItem.hide();
     return;
   }
 
-  // Cost icon based on amount
+  // Cost icon
   let costIcon = '$(check)';
   if (m.cost > 1) { costIcon = '$(flame)'; }
   else if (m.cost > 0.5) { costIcon = '$(warning)'; }
 
-  // Main bar: cost | tokens | burn rate | duration
-  let mainText = `${costIcon} $${m.cost.toFixed(4)}`;
-  mainText += ` | ${formatTokens(m.totalTokens)} tok`;
+  // --- Status bar line 1: Spent, speed, time, code ---
+  let mainText = `${costIcon} Spent $${m.cost.toFixed(4)}`;
   if (m.burnRate > 0) {
-    mainText += ` | ${m.burnRate.toFixed(3)}/min`;
+    mainText += ` ($${m.burnRate.toFixed(3)}/min)`;
   }
   mainText += ` | ${m.duration}`;
   if (m.linesAdded > 0 || m.linesRemoved > 0) {
-    mainText += ` | +${m.linesAdded}/-${m.linesRemoved}`;
+    mainText += ` | ${m.linesAdded} added, ${m.linesRemoved} removed`;
   }
 
   statusBarItem.text = mainText;
   statusBarItem.tooltip = buildTooltip(m);
   statusBarItem.show();
 
-  // Detail bar: context | cache | task
-  let detailText = `ctx:${m.contextPct}%`;
-  if (m.contextPct >= 80) { detailText += ' $(alert)'; }
-  detailText += ` | cache:${m.cacheHitRate.toFixed(0)}%`;
+  // --- Status bar line 2: Memory, savings, task ---
+  let memoryPct = m.contextPct;
+  let detailText = `Memory ${memoryPct}%`;
+  if (memoryPct >= 80) { detailText += ' $(alert) almost full!'; }
+
   if (m.cacheSavings > 0.001) {
-    detailText += ` saved $${m.cacheSavings.toFixed(4)}`;
+    detailText += ` | Saved $${m.cacheSavings.toFixed(4)} from cache`;
   }
+
   if (m.currentTask) {
     const subject = m.currentTask.subject.length > 25
       ? m.currentTask.subject.slice(0, 22) + '...'
       : m.currentTask.subject;
-    detailText += ` | $(play) ${subject} $${m.currentTask.costDelta.toFixed(4)}`;
+    detailText += ` | $(play) ${subject} ($${m.currentTask.costDelta.toFixed(4)})`;
   }
 
   detailBarItem.text = detailText;
@@ -136,17 +128,23 @@ function buildTooltip(m: ReturnType<typeof computeMetrics>): vscode.MarkdownStri
   md.isTrusted = true;
   md.supportThemeIcons = true;
 
-  // Compact tooltip — full details on click
-  md.appendMarkdown(`**${m.model}** | $${m.cost.toFixed(4)}`);
-  if (m.burnRate > 0) { md.appendMarkdown(` | ${m.burnRate.toFixed(3)}/min`); }
-  md.appendMarkdown(`\n\n`);
-  md.appendMarkdown(`in:${formatTokens(m.inputTokens)} out:${formatTokens(m.outputTokens)} | cache:${m.cacheHitRate.toFixed(0)}%`);
-  if (m.cacheSavings > 0.001) { md.appendMarkdown(` saved $${m.cacheSavings.toFixed(4)}`); }
-  md.appendMarkdown(`\n\n`);
-  if (m.currentTask) {
-    md.appendMarkdown(`$(play) ${m.currentTask.subject} **$${m.currentTask.costDelta.toFixed(4)}**\n\n`);
+  md.appendMarkdown(`**${m.model}** — Session cost: **$${m.cost.toFixed(4)}**\n\n`);
+
+  if (m.burnRate > 0) {
+    md.appendMarkdown(`Spending $${m.burnRate.toFixed(3)} per minute\n\n`);
   }
-  md.appendMarkdown(`_Click for full details_`);
+
+  md.appendMarkdown(`Reading ${formatTokens(m.inputTokens)} tokens, writing ${formatTokens(m.outputTokens)} tokens\n\n`);
+
+  if (m.cacheSavings > 0.001) {
+    md.appendMarkdown(`Cache saved you **$${m.cacheSavings.toFixed(4)}** (${m.cacheHitRate.toFixed(0)}% reused)\n\n`);
+  }
+
+  if (m.currentTask) {
+    md.appendMarkdown(`Working on: **${m.currentTask.subject}** ($${m.currentTask.costDelta.toFixed(4)} so far)\n\n`);
+  }
+
+  md.appendMarkdown(`_Click for full breakdown_`);
 
   return md;
 }
@@ -165,24 +163,44 @@ function showDetailsPanel() {
     return;
   }
 
-  // Show quick pick with session info
   const items: vscode.QuickPickItem[] = [
-    { label: `$(credit-card) Cost: $${m.cost.toFixed(4)}`, description: m.burnRate > 0 ? `${m.burnRate.toFixed(4)}/min` : '' },
-    { label: `$(symbol-number) Tokens: ${formatTokens(m.totalTokens)}`, description: `in:${formatTokens(m.inputTokens)} out:${formatTokens(m.outputTokens)}` },
-    { label: `$(database) Cache: ${m.cacheHitRate.toFixed(0)}% hit rate`, description: m.cacheSavings > 0.001 ? `saved $${m.cacheSavings.toFixed(4)}` : '' },
-    { label: `$(browser) Context: ${m.contextPct}%`, description: m.contextPct >= 80 ? 'Use /compact!' : '' },
-    { label: `$(clock) Duration: ${m.duration}`, description: '' },
+    {
+      label: `$(credit-card) Total spent: $${m.cost.toFixed(4)}`,
+      description: m.burnRate > 0 ? `Spending $${m.burnRate.toFixed(3)}/min` : '',
+    },
+    {
+      label: `$(book) Tokens used: ${formatTokens(m.totalTokens)}`,
+      description: `${formatTokens(m.inputTokens)} reading, ${formatTokens(m.outputTokens)} writing`,
+    },
+    {
+      label: `$(savings) Cache savings: $${m.cacheSavings.toFixed(4)}`,
+      description: `${m.cacheHitRate.toFixed(0)}% of input was reused from cache`,
+    },
+    {
+      label: `$(browser) Memory used: ${m.contextPct}%`,
+      description: m.contextPct >= 80 ? 'Almost full! Use /compact to free space' : `${100 - m.contextPct}% remaining`,
+    },
+    {
+      label: `$(clock) Session time: ${m.duration}`,
+      description: `Using ${m.model}`,
+    },
   ];
 
   if (m.linesAdded > 0 || m.linesRemoved > 0) {
-    items.push({ label: `$(code) Code: +${m.linesAdded} / -${m.linesRemoved}`, description: '' });
+    items.push({
+      label: `$(code) Code changes: ${m.linesAdded} lines added, ${m.linesRemoved} removed`,
+      description: '',
+    });
   }
 
   if (m.currentTask) {
-    items.push({ label: `$(play) Task: ${m.currentTask.subject}`, description: `$${m.currentTask.costDelta.toFixed(4)}` });
+    items.push({
+      label: `$(play) Working on: ${m.currentTask.subject}`,
+      description: `$${m.currentTask.costDelta.toFixed(4)} spent on this task`,
+    });
   }
 
-  // Show completed tasks
+  // Completed tasks
   const completedTasks = new Map<string, { subject: string; startCost: number; endCost: number }>();
   for (const t of session.tasks) {
     if (t.event === 'task_started') {
@@ -193,16 +211,25 @@ function showDetailsPanel() {
       if (existing) { existing.endCost = t.cost_snapshot_usd; }
     }
   }
+
+  let hasCompleted = false;
   for (const [, task] of completedTasks) {
     if (task.endCost > 0) {
       const delta = task.endCost - task.startCost;
-      items.push({ label: `$(check) ${task.subject}`, description: `$${delta.toFixed(4)}` });
+      if (!hasCompleted) {
+        items.push({ label: '', description: '', kind: vscode.QuickPickItemKind.Separator });
+        hasCompleted = true;
+      }
+      items.push({
+        label: `$(check) ${task.subject}`,
+        description: `Cost $${delta.toFixed(4)}`,
+      });
     }
   }
 
   vscode.window.showQuickPick(items, {
-    title: `Claude Status — ${m.model}`,
-    placeHolder: 'Session details',
+    title: `Claude Session — ${m.model}`,
+    placeHolder: 'Your session at a glance (click any item to close)',
   });
 }
 
