@@ -92,7 +92,17 @@ All data is stored locally in `~/.claude-status/sessions/`. Nothing is sent anyw
 - [jq](https://jqlang.github.io/jq/) — JSON processor used by hook scripts
 - [Go 1.22+](https://go.dev/dl/) (only for building from source)
 
-### Option 1: Quick install (Go users)
+### Option 1: Homebrew (macOS / Linux)
+
+```bash
+brew tap oscarangulo/claude-status
+brew install claude-status
+claude-status install
+```
+
+> Homebrew compiles from source, installs `jq` as a dependency, and puts the binary in your PATH automatically.
+
+### Option 2: Quick install (Go users)
 
 The fastest way if you have Go installed. The binary goes straight to your PATH — no extra steps.
 
@@ -149,6 +159,7 @@ Restart Claude Code after installing.
 
 | Method | Binary location | In PATH? |
 |--------|----------------|----------|
+| Homebrew | `/opt/homebrew/bin/claude-status` | Yes (managed by brew) |
 | `go install` | `~/go/bin/claude-status` | Yes (if Go is set up) |
 | `make install` | `~/.local/bin/claude-status` | Yes (auto-configured) |
 | Download binary | Wherever you put it | You choose |
@@ -176,6 +187,13 @@ claude-status --version   # Show installed version
 ## Updating
 
 When a new version is released, update the binary and then run `update` to refresh the hook scripts:
+
+### If installed with Homebrew
+
+```bash
+brew upgrade claude-status
+claude-status update
+```
 
 ### If installed with `go install`
 
