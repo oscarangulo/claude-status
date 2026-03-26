@@ -2,7 +2,7 @@
   "name": "claude-status",
   "displayName": "Claude Status Monitor",
   "description": "Real-time token usage and cost monitoring for Claude Code — see costs, tokens, cache efficiency, and task progress in your status bar",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "publisher": "OscarAngulo",
   "license": "MIT",
   "icon": "icon.png",
@@ -39,6 +39,14 @@
       {
         "command": "claude-status.refresh",
         "title": "Claude Status: Refresh"
+      },
+      {
+        "command": "claude-status.install",
+        "title": "Claude Status: Install Hooks"
+      },
+      {
+        "command": "claude-status.uninstall",
+        "title": "Claude Status: Remove Hooks"
       }
     ]
   },

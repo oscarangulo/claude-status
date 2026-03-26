@@ -8,6 +8,7 @@ import {
   formatTokens,
   SessionData,
 } from './session';
+import { isInstalled, installHooks, uninstallHooks } from './installer';
 
 let statusBarItem: vscode.StatusBarItem;
 let detailBarItem: vscode.StatusBarItem;
@@ -27,7 +28,14 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('claude-status.showDetails', showDetailsPanel),
     vscode.commands.registerCommand('claude-status.refresh', () => updateStatusBar()),
+    vscode.commands.registerCommand('claude-status.install', runInstall),
+    vscode.commands.registerCommand('claude-status.uninstall', runUninstall),
   );
+
+  // Auto-install hooks on first activation if not already installed
+  if (!isInstalled()) {
+    autoInstall();
+  }
 
   updateStatusBar();
   startWatching();
@@ -39,6 +47,42 @@ export function activate(context: vscode.ExtensionContext) {
   }});
 }
 
+async function autoInstall() {
+  const answer = await vscode.window.showInformationMessage(
+    'Claude Status Monitor needs to configure hooks in Claude Code to track costs. Set up now?',
+    'Yes, set up automatically',
+    'Not now',
+  );
+  if (answer === 'Yes, set up automatically') {
+    await runInstall();
+  }
+}
+
+async function runInstall() {
+  const success = await installHooks();
+  if (success) {
+    vscode.window.showInformationMessage(
+      'Claude Status Monitor is ready! Cost data will appear after Claude\'s next response.'
+    );
+    startWatching();
+    updateStatusBar();
+  }
+}
+
+async function runUninstall() {
+  const answer = await vscode.window.showWarningMessage(
+    'Remove Claude Status hooks from Claude Code? Your session history will be preserved.',
+    'Yes, remove hooks',
+    'Cancel',
+  );
+  if (answer === 'Yes, remove hooks') {
+    const success = await uninstallHooks();
+    if (success) {
+      vscode.window.showInformationMessage('Hooks removed. Session data preserved in ~/.claude-status/sessions/');
+    }
+  }
+}
+
 function startWatching() {
   const dir = getSessionsDir();
   if (!fs.existsSync(dir)) {
@@ -46,6 +90,7 @@ function startWatching() {
     return;
   }
   try {
+    if (watcher) { watcher.close(); }
     watcher = fs.watch(dir, (_eventType, filename) => {
       if (filename && filename.endsWith('.jsonl')) {
         updateStatusBar();
@@ -57,16 +102,21 @@ function startWatching() {
 }
 
 function updateStatusBar() {
+  if (!isInstalled()) {
+    statusBarItem.text = '$(pulse) Claude Status: click to set up';
+    statusBarItem.command = 'claude-status.install';
+    statusBarItem.tooltip = 'Click to configure Claude Code hooks automatically';
+    statusBarItem.show();
+    detailBarItem.hide();
+    return;
+  }
+
+  statusBarItem.command = 'claude-status.showDetails';
+
   const file = getActiveSessionFile();
   if (!file) {
-    statusBarItem.text = '$(pulse) Claude: no sessions yet';
-    statusBarItem.tooltip = new vscode.MarkdownString(
-      '**No session data found**\n\n' +
-      'Make sure hooks are installed:\n\n' +
-      '```\nclaude-status install\n```\n\n' +
-      'Then start a new Claude Code session.\n\n' +
-      '_Data appears in `~/.claude-status/sessions/`_'
-    );
+    statusBarItem.text = '$(pulse) Claude: ready — waiting for session';
+    statusBarItem.tooltip = 'Hooks are configured. Data will appear after Claude\'s next response.';
     statusBarItem.show();
     detailBarItem.hide();
     return;
@@ -82,12 +132,7 @@ function updateStatusBar() {
   const m = computeMetrics(session);
   if (!m) {
     statusBarItem.text = '$(pulse) Claude: waiting for next response...';
-    statusBarItem.tooltip = new vscode.MarkdownString(
-      '**Session found but no cost data yet**\n\n' +
-      'Data will appear after Claude\'s next response.\n\n' +
-      'If nothing appears after a few messages, verify hooks are installed:\n\n' +
-      '```\nclaude-status install\n```'
-    );
+    statusBarItem.tooltip = 'Hooks are configured. Data will appear after Claude\'s next response.';
     statusBarItem.show();
     detailBarItem.hide();
     return;
@@ -113,9 +158,8 @@ function updateStatusBar() {
   statusBarItem.show();
 
   // --- Status bar line 2: Memory, savings, task ---
-  let memoryPct = m.contextPct;
-  let detailText = `Memory ${memoryPct}%`;
-  if (memoryPct >= 80) { detailText += ' $(alert) almost full!'; }
+  let detailText = `Memory ${m.contextPct}%`;
+  if (m.contextPct >= 80) { detailText += ' $(alert) almost full!'; }
 
   if (m.cacheSavings > 0.001) {
     detailText += ` | Saved $${m.cacheSavings.toFixed(4)} from cache`;
@@ -140,21 +184,16 @@ function buildTooltip(m: ReturnType<typeof computeMetrics>): vscode.MarkdownStri
   md.supportThemeIcons = true;
 
   md.appendMarkdown(`**${m.model}** — Session cost: **$${m.cost.toFixed(4)}**\n\n`);
-
   if (m.burnRate > 0) {
     md.appendMarkdown(`Spending $${m.burnRate.toFixed(3)} per minute\n\n`);
   }
-
   md.appendMarkdown(`Reading ${formatTokens(m.inputTokens)} tokens, writing ${formatTokens(m.outputTokens)} tokens\n\n`);
-
   if (m.cacheSavings > 0.001) {
     md.appendMarkdown(`Cache saved you **$${m.cacheSavings.toFixed(4)}** (${m.cacheHitRate.toFixed(0)}% reused)\n\n`);
   }
-
   if (m.currentTask) {
     md.appendMarkdown(`Working on: **${m.currentTask.subject}** ($${m.currentTask.costDelta.toFixed(4)} so far)\n\n`);
   }
-
   md.appendMarkdown(`_Click for full breakdown_`);
 
   return md;
@@ -163,14 +202,14 @@ function buildTooltip(m: ReturnType<typeof computeMetrics>): vscode.MarkdownStri
 function showDetailsPanel() {
   const file = getActiveSessionFile();
   if (!file) {
-    vscode.window.showInformationMessage('No active Claude Code session. Run `claude-status install` first.');
+    vscode.window.showInformationMessage('No session data yet. Data appears after Claude\'s next response.');
     return;
   }
 
   const session = parseSessionFile(file);
   const m = computeMetrics(session);
   if (!m) {
-    vscode.window.showInformationMessage('Session has no data yet.');
+    vscode.window.showInformationMessage('Waiting for cost data. It will appear after Claude\'s next response.');
     return;
   }
 
