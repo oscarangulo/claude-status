@@ -74,10 +74,14 @@ func Install() error {
 		fmt.Printf("  Backed up settings to %s\n", backupPath)
 	}
 
-	// Status line command
-	statusLineCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "status-line.sh"))
-	cmdJSON, _ := json.Marshal(statusLineCmd)
-	settings["statusLineCMD"] = json.RawMessage(cmdJSON)
+	// Status line — uses the object format: {"type": "command", "command": "..."}
+	statusLineObj := map[string]string{
+		"type":    "command",
+		"command": fmt.Sprintf("bash %s", filepath.Join(hooksDir, "status-line.sh")),
+	}
+	statusJSON, _ := json.Marshal(statusLineObj)
+	settings["statusLine"] = json.RawMessage(statusJSON)
+	delete(settings, "statusLineCMD") // remove old key if present
 
 	// Parse existing hooks
 	var existingHooks map[string][]json.RawMessage
@@ -148,12 +152,19 @@ func Uninstall() error {
 			os.WriteFile(backupPath, data, 0644)
 			fmt.Printf("  Backed up settings to %s\n", backupPath)
 
-			// Remove statusLineCMD if it points to our script
+			// Remove statusLine if it points to our script
+			if raw, ok := settings["statusLine"]; ok {
+				var sl map[string]string
+				if json.Unmarshal(raw, &sl) == nil && strings.Contains(sl["command"], ".claude-status") {
+					delete(settings, "statusLine")
+					fmt.Println("  Removed statusLine")
+				}
+			}
+			// Also clean up old key name if present
 			if raw, ok := settings["statusLineCMD"]; ok {
 				var cmd string
 				if json.Unmarshal(raw, &cmd) == nil && strings.Contains(cmd, ".claude-status") {
 					delete(settings, "statusLineCMD")
-					fmt.Println("  Removed statusLineCMD")
 				}
 			}
 
