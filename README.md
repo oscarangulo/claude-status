@@ -92,29 +92,33 @@ All data is stored locally in `~/.claude-status/sessions/`. Nothing is sent anyw
 - [jq](https://jqlang.github.io/jq/) — JSON processor used by hook scripts
 - [Go 1.22+](https://go.dev/dl/) (only for building from source)
 
-### Quick install (Go)
+### Option 1: Quick install (Go users)
+
+The fastest way if you have Go installed. The binary goes straight to your PATH — no extra steps.
 
 ```bash
 go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
 claude-status install
 ```
 
-> `go install` places the binary in `$GOPATH/bin`, which is typically already in your PATH.
+> `go install` places the binary in `$GOPATH/bin` (usually `~/go/bin`), which is already in your PATH if Go is set up correctly. You can verify with `go env GOPATH`.
 
-### From source
+### Option 2: From source
+
+Clone, build, and install to your PATH in one step:
 
 ```bash
 git clone https://github.com/oscarangulo/claude-status.git
 cd claude-status
-make install        # builds + adds to PATH (~/.local/bin)
+make install            # builds + copies to ~/.local/bin + adds to PATH
 claude-status install   # configures Claude Code hooks
 ```
 
-> `make install` adds the binary to `~/.local/bin` and updates your shell PATH if needed.
+> `make install` places the binary in `~/.local/bin` and automatically adds it to your PATH (updates `.zshrc` or `.bashrc` if needed). Open a new terminal or run `source ~/.zshrc` for the PATH change to take effect.
 
-### Download binary
+### Option 3: Download binary
 
-Download from [Releases](https://github.com/oscarangulo/claude-status/releases):
+Download pre-built binaries from [Releases](https://github.com/oscarangulo/claude-status/releases). No Go required.
 
 | OS | Architecture | Binary |
 |----|-------------|--------|
@@ -128,7 +132,9 @@ Download from [Releases](https://github.com/oscarangulo/claude-status/releases):
 # Example: macOS Apple Silicon
 curl -L https://github.com/oscarangulo/claude-status/releases/latest/download/claude-status-darwin-arm64 -o claude-status
 chmod +x claude-status
-./claude-status install
+# Move to a directory in your PATH:
+mv claude-status ~/.local/bin/   # or /usr/local/bin/ with sudo
+claude-status install
 ```
 
 ### What `install` does
@@ -138,6 +144,14 @@ chmod +x claude-status
 3. Creates a backup of your existing settings
 
 Restart Claude Code after installing.
+
+### Where does the binary go?
+
+| Method | Binary location | In PATH? |
+|--------|----------------|----------|
+| `go install` | `~/go/bin/claude-status` | Yes (if Go is set up) |
+| `make install` | `~/.local/bin/claude-status` | Yes (auto-configured) |
+| Download binary | Wherever you put it | You choose |
 
 ## Platform support
 
@@ -175,8 +189,8 @@ claude-status update
 ```bash
 cd claude-status
 git pull
-make build
-./bin/claude-status update
+make install
+claude-status update
 ```
 
 ### If using a downloaded binary
