@@ -92,21 +92,25 @@ All data is stored locally in `~/.claude-status/sessions/`. Nothing is sent anyw
 - [jq](https://jqlang.github.io/jq/) — JSON processor used by hook scripts
 - [Go 1.22+](https://go.dev/dl/) (only for building from source)
 
-### Quick install
+### Quick install (Go)
 
 ```bash
 go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
 claude-status install
 ```
 
+> `go install` places the binary in `$GOPATH/bin`, which is typically already in your PATH.
+
 ### From source
 
 ```bash
 git clone https://github.com/oscarangulo/claude-status.git
 cd claude-status
-make build
-./bin/claude-status install
+make install        # builds + adds to PATH (~/.local/bin)
+claude-status install   # configures Claude Code hooks
 ```
+
+> `make install` adds the binary to `~/.local/bin` and updates your shell PATH if needed.
 
 ### Download binary
 
