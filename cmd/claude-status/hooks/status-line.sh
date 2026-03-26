@@ -2,10 +2,9 @@
 # claude-status: Rich status line for Claude Code
 #
 # Shows real-time cost, tokens, cache efficiency, context usage,
-# and current task info — all inline in Claude Code's status bar.
+# and current task — with ANSI colors, directly in Claude Code's status bar.
 #
-# Configure in ~/.claude/settings.json:
-#   "statusLineCMD": "bash ~/.claude-status/hooks/status-line.sh"
+# Supports multi-line output: line 1 = main metrics, line 2 = task info
 
 set -euo pipefail
 
@@ -13,7 +12,18 @@ INPUT=$(cat)
 DATA_DIR="${CLAUDE_STATUS_DIR:-$HOME/.claude-status}"
 SESSION_DIR="$DATA_DIR/sessions"
 
-# Single jq call to extract everything at once (fast!)
+# --- ANSI colors ---
+RST=$'\033[0m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+GREEN=$'\033[32m'
+YELLOW=$'\033[33m'
+RED=$'\033[31m'
+CYAN=$'\033[36m'
+MAGENTA=$'\033[35m'
+WHITE=$'\033[97m'
+
+# Single jq call to extract everything at once
 eval "$(echo "$INPUT" | jq -r '
   @sh "SESSION_ID=\(.session_id // "unknown")",
   @sh "TOTAL_COST=\(.cost.total_cost_usd // 0)",
@@ -42,7 +52,7 @@ printf '{"type":"snapshot","timestamp":"%s","session_id":"%s","total_cost_usd":%
   "$CACHE_READ" "$CACHE_WRITE" "$CTX_PCT" "$CTX_SIZE" "$TOTAL_DURATION" \
   "$API_DURATION" "$LINES_ADDED" "$LINES_REMOVED" "$MODEL" >> "$LOG_FILE"
 
-# --- Format tokens for display ---
+# --- Format tokens ---
 format_tok() {
   local n=$1
   if [ "$n" -ge 1000000 ]; then
@@ -54,7 +64,7 @@ format_tok() {
   fi
 }
 
-# --- Calculate cache hit rate ---
+# --- Cache hit rate ---
 TOTAL_IN=$((INPUT_TOK + CACHE_READ))
 if [ "$TOTAL_IN" -gt 0 ]; then
   CACHE_HIT=$(echo "scale=0; $CACHE_READ * 100 / $TOTAL_IN" | bc)
@@ -62,7 +72,16 @@ else
   CACHE_HIT=0
 fi
 
-# --- Format duration ---
+# Cache color based on rate
+if [ "$CACHE_HIT" -ge 50 ]; then
+  CACHE_COLOR=$GREEN
+elif [ "$CACHE_HIT" -ge 20 ]; then
+  CACHE_COLOR=$YELLOW
+else
+  CACHE_COLOR=$RED
+fi
+
+# --- Duration ---
 if [ "$TOTAL_DURATION" -gt 0 ]; then
   SECS=$((TOTAL_DURATION / 1000))
   if [ "$SECS" -ge 3600 ]; then
@@ -76,61 +95,76 @@ else
   DURATION="0s"
 fi
 
-# --- Context bar (visual) ---
-# 5 chars: filled/empty blocks proportional to usage
-BAR_LEN=5
+# --- Context bar (ASCII safe) ---
+BAR_LEN=10
 FILLED=$((CTX_PCT * BAR_LEN / 100))
 if [ "$FILLED" -gt "$BAR_LEN" ]; then FILLED=$BAR_LEN; fi
 EMPTY=$((BAR_LEN - FILLED))
-CTX_BAR=$(printf '%0.s█' $(seq 1 $FILLED 2>/dev/null) ; printf '%0.s░' $(seq 1 $EMPTY 2>/dev/null))
 
-# --- Context warning ---
-CTX_WARN=""
+# Color the bar based on usage
 if [ "$CTX_PCT" -ge 80 ]; then
-  CTX_WARN=" ⚠"
+  BAR_COLOR=$RED
 elif [ "$CTX_PCT" -ge 60 ]; then
-  CTX_WARN=" △"
+  BAR_COLOR=$YELLOW
+else
+  BAR_COLOR=$GREEN
 fi
 
-# --- Current task (read from log) ---
-TASK_INFO=""
-if [ -f "$LOG_FILE" ]; then
-  # Find the last task_started event that hasn't been completed
-  LAST_STARTED=$(grep '"event":"task_started"' "$LOG_FILE" 2>/dev/null | tail -1 || echo "")
-  if [ -n "$LAST_STARTED" ]; then
-    TASK_SUBJECT=$(echo "$LAST_STARTED" | jq -r '.task_subject // ""')
-    TASK_COST_START=$(echo "$LAST_STARTED" | jq -r '.cost_snapshot_usd // 0')
+FILLED_BAR=""
+EMPTY_BAR=""
+for ((i=0; i<FILLED; i++)); do FILLED_BAR="${FILLED_BAR}#"; done
+for ((i=0; i<EMPTY; i++)); do EMPTY_BAR="${EMPTY_BAR}-"; done
+CTX_BAR="${BAR_COLOR}${FILLED_BAR}${DIM}${EMPTY_BAR}${RST}"
 
-    # Check if it was completed
-    TASK_ID=$(echo "$LAST_STARTED" | jq -r '.task_id // ""')
-    COMPLETED=$(grep "\"task_id\":\"$TASK_ID\".*\"event\":\"task_completed\"" "$LOG_FILE" 2>/dev/null | tail -1 || echo "")
+# Context warning
+CTX_WARN=""
+if [ "$CTX_PCT" -ge 80 ]; then
+  CTX_WARN=" ${RED}!!${RST}"
+fi
 
-    if [ -z "$COMPLETED" ]; then
-      # Task is still running — show its cost so far
-      TASK_DELTA=$(echo "scale=4; $TOTAL_COST - $TASK_COST_START" | bc)
-      # Truncate subject to 20 chars
-      if [ ${#TASK_SUBJECT} -gt 20 ]; then
-        TASK_SUBJECT="${TASK_SUBJECT:0:17}..."
-      fi
-      TASK_INFO=" | ▸ ${TASK_SUBJECT} \$${TASK_DELTA}"
-    fi
-  fi
+# --- Cost color ---
+COST_VAL=$(printf "%.4f" "$TOTAL_COST")
+if [ "$(echo "$TOTAL_COST > 1" | bc)" -eq 1 ]; then
+  COST_DISPLAY="${RED}\$${COST_VAL}${RST}"
+elif [ "$(echo "$TOTAL_COST > 0.5" | bc)" -eq 1 ]; then
+  COST_DISPLAY="${YELLOW}\$${COST_VAL}${RST}"
+else
+  COST_DISPLAY="${GREEN}\$${COST_VAL}${RST}"
 fi
 
 # --- Lines changed ---
 LINES_INFO=""
 if [ "$LINES_ADDED" -gt 0 ] || [ "$LINES_REMOVED" -gt 0 ]; then
-  LINES_INFO=" | +${LINES_ADDED}/-${LINES_REMOVED}"
+  LINES_INFO=" ${DIM}|${RST} ${GREEN}+${LINES_ADDED}${RST}${DIM}/${RST}${RED}-${LINES_REMOVED}${RST}"
 fi
 
-# --- Assemble status line ---
-# Format: $0.1234 | 45.2K tok | cache:62% | ██░░░ 34% | 6m32s | +120/-5 | ▸ Task name $0.04
+# --- Current task (from log) ---
+TASK_LINE=""
+if [ -f "$LOG_FILE" ]; then
+  LAST_STARTED=$(grep '"event":"task_started"' "$LOG_FILE" 2>/dev/null | tail -1 || echo "")
+  if [ -n "$LAST_STARTED" ]; then
+    TASK_SUBJECT=$(echo "$LAST_STARTED" | jq -r '.task_subject // ""')
+    TASK_COST_START=$(echo "$LAST_STARTED" | jq -r '.cost_snapshot_usd // 0')
+    TASK_ID=$(echo "$LAST_STARTED" | jq -r '.task_id // ""')
+    COMPLETED=$(grep "\"task_id\":\"$TASK_ID\".*\"event\":\"task_completed\"" "$LOG_FILE" 2>/dev/null | tail -1 || echo "")
+
+    if [ -z "$COMPLETED" ]; then
+      TASK_DELTA=$(printf "%.4f" "$(echo "scale=4; $TOTAL_COST - $TASK_COST_START" | bc)")
+      if [ ${#TASK_SUBJECT} -gt 30 ]; then
+        TASK_SUBJECT="${TASK_SUBJECT:0:27}..."
+      fi
+      TASK_LINE="${MAGENTA}> ${TASK_SUBJECT}${RST} ${DIM}|${RST} ${CYAN}\$${TASK_DELTA}${RST}"
+    fi
+  fi
+fi
+
+# --- Line 1: Main metrics ---
 TOTAL_TOK=$((TOTAL_INPUT + TOTAL_OUTPUT))
-printf "\$%.4f | %s tok | cache:%s%% | %s %s%%%s | %s%s%s" \
-  "$TOTAL_COST" \
-  "$(format_tok $TOTAL_TOK)" \
-  "$CACHE_HIT" \
-  "$CTX_BAR" "$CTX_PCT" "$CTX_WARN" \
-  "$DURATION" \
-  "$LINES_INFO" \
-  "$TASK_INFO"
+printf "%b" "${COST_DISPLAY} ${DIM}|${RST} ${WHITE}$(format_tok $TOTAL_TOK) tok${RST} ${DIM}|${RST} cache:${CACHE_COLOR}${CACHE_HIT}%${RST} ${DIM}|${RST} [${CTX_BAR}] ${BAR_COLOR}${CTX_PCT}%${RST}${CTX_WARN} ${DIM}|${RST} ${DIM}${DURATION}${RST}${LINES_INFO}"
+echo
+
+# --- Line 2: Current task (if any) ---
+if [ -n "$TASK_LINE" ]; then
+  printf "%b" "$TASK_LINE"
+  echo
+fi
