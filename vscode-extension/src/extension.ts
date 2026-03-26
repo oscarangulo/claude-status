@@ -81,13 +81,12 @@ function updateStatusBar() {
 
   const m = computeMetrics(session);
   if (!m) {
-    statusBarItem.text = '$(pulse) Claude: waiting for data...';
+    statusBarItem.text = '$(pulse) Claude: waiting for next response...';
     statusBarItem.tooltip = new vscode.MarkdownString(
       '**Session found but no cost data yet**\n\n' +
-      'This can happen if:\n' +
-      '- The session started before hooks were installed\n' +
-      '- Claude Code hasn\'t responded yet in this session\n\n' +
-      'Try starting a **new Claude Code session** and the data will appear automatically.'
+      'Data will appear after Claude\'s next response.\n\n' +
+      'If nothing appears after a few messages, verify hooks are installed:\n\n' +
+      '```\nclaude-status install\n```'
     );
     statusBarItem.show();
     detailBarItem.hide();
