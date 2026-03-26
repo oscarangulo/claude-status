@@ -2,9 +2,8 @@
 # claude-status: Rich status line for Claude Code
 #
 # Shows real-time cost, tokens, cache efficiency, context usage,
-# and current task — with ANSI colors, directly in Claude Code's status bar.
-#
-# Supports multi-line output: line 1 = main metrics, line 2 = task info
+# burn rate, cache savings, and current task — with ANSI colors.
+# Multi-line: line 1 = cost & tokens, line 2 = context & efficiency, line 3 = task
 
 set -euo pipefail
 
@@ -22,8 +21,9 @@ RED=$'\033[31m'
 CYAN=$'\033[36m'
 MAGENTA=$'\033[35m'
 WHITE=$'\033[97m'
+BLUE=$'\033[34m'
 
-# Single jq call to extract everything at once
+# Single jq call to extract everything
 eval "$(echo "$INPUT" | jq -r '
   @sh "SESSION_ID=\(.session_id // "unknown")",
   @sh "TOTAL_COST=\(.cost.total_cost_usd // 0)",
@@ -72,13 +72,52 @@ else
   CACHE_HIT=0
 fi
 
-# Cache color based on rate
 if [ "$CACHE_HIT" -ge 50 ]; then
   CACHE_COLOR=$GREEN
 elif [ "$CACHE_HIT" -ge 20 ]; then
   CACHE_COLOR=$YELLOW
 else
   CACHE_COLOR=$RED
+fi
+
+# --- Pricing per model (per token) ---
+# Defaults to Opus pricing; detect model for accuracy
+case "$MODEL" in
+  *Haiku*)
+    IN_PRICE="0.000001"   # $1/MTok
+    OUT_PRICE="0.000005"  # $5/MTok
+    CACHE_R_PRICE="0.0000001"   # $0.10/MTok
+    CACHE_W_PRICE="0.00000125"  # $1.25/MTok
+    ;;
+  *Sonnet*)
+    IN_PRICE="0.000003"   # $3/MTok
+    OUT_PRICE="0.000015"  # $15/MTok
+    CACHE_R_PRICE="0.0000003"   # $0.30/MTok
+    CACHE_W_PRICE="0.00000375"  # $3.75/MTok
+    ;;
+  *) # Opus or unknown
+    IN_PRICE="0.000005"   # $5/MTok
+    OUT_PRICE="0.000025"  # $25/MTok
+    CACHE_R_PRICE="0.0000005"   # $0.50/MTok
+    CACHE_W_PRICE="0.00000625"  # $6.25/MTok
+    ;;
+esac
+
+# --- Cost breakdown by type ---
+INPUT_COST=$(echo "scale=6; $INPUT_TOK * $IN_PRICE" | bc)
+OUTPUT_COST=$(echo "scale=6; $OUTPUT_TOK * $OUT_PRICE" | bc)
+CACHE_R_COST=$(echo "scale=6; $CACHE_READ * $CACHE_R_PRICE" | bc)
+CACHE_W_COST=$(echo "scale=6; $CACHE_WRITE * $CACHE_W_PRICE" | bc)
+
+# Cache savings = what you would have paid at full input price minus what you actually paid
+CACHE_SAVINGS=$(echo "scale=6; ($CACHE_READ * $IN_PRICE) - ($CACHE_READ * $CACHE_R_PRICE)" | bc)
+CACHE_SAVINGS_DISPLAY=$(printf "%.4f" "$CACHE_SAVINGS")
+
+# --- Burn rate ($/min) ---
+BURN_RATE="0"
+if [ "$TOTAL_DURATION" -gt 60000 ]; then
+  MINUTES=$(echo "scale=2; $TOTAL_DURATION / 60000" | bc)
+  BURN_RATE=$(echo "scale=4; $TOTAL_COST / $MINUTES" | bc)
 fi
 
 # --- Duration ---
@@ -95,13 +134,12 @@ else
   DURATION="0s"
 fi
 
-# --- Context bar (ASCII safe) ---
+# --- Context bar ---
 BAR_LEN=10
 FILLED=$((CTX_PCT * BAR_LEN / 100))
 if [ "$FILLED" -gt "$BAR_LEN" ]; then FILLED=$BAR_LEN; fi
 EMPTY=$((BAR_LEN - FILLED))
 
-# Color the bar based on usage
 if [ "$CTX_PCT" -ge 80 ]; then
   BAR_COLOR=$RED
 elif [ "$CTX_PCT" -ge 60 ]; then
@@ -116,7 +154,6 @@ for ((i=0; i<FILLED; i++)); do FILLED_BAR="${FILLED_BAR}#"; done
 for ((i=0; i<EMPTY; i++)); do EMPTY_BAR="${EMPTY_BAR}-"; done
 CTX_BAR="${BAR_COLOR}${FILLED_BAR}${DIM}${EMPTY_BAR}${RST}"
 
-# Context warning
 CTX_WARN=""
 if [ "$CTX_PCT" -ge 80 ]; then
   CTX_WARN=" ${RED}!!${RST}"
@@ -125,7 +162,7 @@ fi
 # --- Cost color ---
 COST_VAL=$(printf "%.4f" "$TOTAL_COST")
 if [ "$(echo "$TOTAL_COST > 1" | bc)" -eq 1 ]; then
-  COST_DISPLAY="${RED}\$${COST_VAL}${RST}"
+  COST_DISPLAY="${RED}${BOLD}\$${COST_VAL}${RST}"
 elif [ "$(echo "$TOTAL_COST > 0.5" | bc)" -eq 1 ]; then
   COST_DISPLAY="${YELLOW}\$${COST_VAL}${RST}"
 else
@@ -138,7 +175,26 @@ if [ "$LINES_ADDED" -gt 0 ] || [ "$LINES_REMOVED" -gt 0 ]; then
   LINES_INFO=" ${DIM}|${RST} ${GREEN}+${LINES_ADDED}${RST}${DIM}/${RST}${RED}-${LINES_REMOVED}${RST}"
 fi
 
-# --- Current task (from log) ---
+# --- Burn rate display ---
+BURN_DISPLAY=""
+if [ "$(echo "$BURN_RATE > 0" | bc)" -eq 1 ]; then
+  BURN_VAL=$(printf "%.3f" "$BURN_RATE")
+  if [ "$(echo "$BURN_RATE > 0.1" | bc)" -eq 1 ]; then
+    BURN_DISPLAY=" ${DIM}|${RST} ${RED}${BURN_VAL}/min${RST}"
+  elif [ "$(echo "$BURN_RATE > 0.05" | bc)" -eq 1 ]; then
+    BURN_DISPLAY=" ${DIM}|${RST} ${YELLOW}${BURN_VAL}/min${RST}"
+  else
+    BURN_DISPLAY=" ${DIM}|${RST} ${DIM}${BURN_VAL}/min${RST}"
+  fi
+fi
+
+# --- Cache savings display ---
+SAVINGS_DISPLAY=""
+if [ "$(echo "$CACHE_SAVINGS > 0.001" | bc)" -eq 1 ]; then
+  SAVINGS_DISPLAY=" ${DIM}|${RST} ${GREEN}saved \$${CACHE_SAVINGS_DISPLAY}${RST}"
+fi
+
+# --- Current task ---
 TASK_LINE=""
 if [ -f "$LOG_FILE" ]; then
   LAST_STARTED=$(grep '"event":"task_started"' "$LOG_FILE" 2>/dev/null | tail -1 || echo "")
@@ -150,20 +206,24 @@ if [ -f "$LOG_FILE" ]; then
 
     if [ -z "$COMPLETED" ]; then
       TASK_DELTA=$(printf "%.4f" "$(echo "scale=4; $TOTAL_COST - $TASK_COST_START" | bc)")
-      if [ ${#TASK_SUBJECT} -gt 30 ]; then
-        TASK_SUBJECT="${TASK_SUBJECT:0:27}..."
+      if [ ${#TASK_SUBJECT} -gt 35 ]; then
+        TASK_SUBJECT="${TASK_SUBJECT:0:32}..."
       fi
-      TASK_LINE="${MAGENTA}> ${TASK_SUBJECT}${RST} ${DIM}|${RST} ${CYAN}\$${TASK_DELTA}${RST}"
+      TASK_LINE="${MAGENTA}> ${TASK_SUBJECT}${RST} ${CYAN}\$${TASK_DELTA}${RST}"
     fi
   fi
 fi
 
-# --- Line 1: Main metrics ---
+# --- Line 1: Cost, tokens, burn rate ---
 TOTAL_TOK=$((TOTAL_INPUT + TOTAL_OUTPUT))
-printf "%b" "${COST_DISPLAY} ${DIM}|${RST} ${WHITE}$(format_tok $TOTAL_TOK) tok${RST} ${DIM}|${RST} cache:${CACHE_COLOR}${CACHE_HIT}%${RST} ${DIM}|${RST} [${CTX_BAR}] ${BAR_COLOR}${CTX_PCT}%${RST}${CTX_WARN} ${DIM}|${RST} ${DIM}${DURATION}${RST}${LINES_INFO}"
+printf "%b" "${COST_DISPLAY} ${DIM}|${RST} ${WHITE}$(format_tok $TOTAL_TOK)${RST} ${DIM}(${RST}${DIM}in:${RST}$(format_tok $INPUT_TOK) ${DIM}out:${RST}$(format_tok $OUTPUT_TOK)${DIM})${RST}${BURN_DISPLAY} ${DIM}|${RST} ${DIM}${DURATION}${RST}${LINES_INFO}"
 echo
 
-# --- Line 2: Current task (if any) ---
+# --- Line 2: Context, cache, savings ---
+printf "%b" "[${CTX_BAR}] ${BAR_COLOR}${CTX_PCT}%${RST}${CTX_WARN} ${DIM}|${RST} cache:${CACHE_COLOR}${CACHE_HIT}%${RST}${SAVINGS_DISPLAY}"
+echo
+
+# --- Line 3: Current task (if any) ---
 if [ -n "$TASK_LINE" ]; then
   printf "%b" "$TASK_LINE"
   echo

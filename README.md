@@ -16,35 +16,73 @@
 See exactly where your tokens go — directly in Claude Code's status bar. No extra terminal, no browser, no setup friction.
 
 ```
-$0.1847 | 91.0K tok | cache:43% | ██░░░ 48% | 6m32s | +210/-15 | ▸ Auth system $0.08
+$0.3500 | 91.0K (in:45.0K out:12.0K) | 0.035/min | 10m0s | +210/-15
+[###-------] 34% | cache:43% | saved $0.1575
+> Implement auth system $0.0847
 ```
 
 ## What it shows
 
+### Line 1 — Cost & Tokens
 | Segment | Meaning |
 |---------|---------|
-| `$0.1847` | Total session cost |
-| `91.0K tok` | Total tokens (input + output) |
-| `cache:43%` | Cache hit rate — higher is better |
-| `██░░░ 48%` | Context window usage with visual bar |
-| `⚠` | Warning when context > 80% (use `/compact`) |
-| `6m32s` | Session duration |
-| `+210/-15` | Lines of code added/removed |
-| `▸ Auth system $0.08` | Current task and its cost so far |
+| `$0.3500` | Total session cost (green < $0.50, yellow < $1, red > $1) |
+| `91.0K` | Total tokens with input/output breakdown |
+| `(in:45K out:12K)` | Input vs output tokens — output costs 5x more |
+| `0.035/min` | Burn rate — your spending speed (colored by intensity) |
+| `10m0s` | Session wall time |
+| `+210/-15` | Lines of code added (green) / removed (red) |
+
+### Line 2 — Context & Cache
+| Segment | Meaning |
+|---------|---------|
+| `[###-------] 34%` | Context window usage bar (green/yellow/red) |
+| `!!` | Danger alert when context > 80% — use `/compact` |
+| `cache:43%` | Cache hit rate (green > 50%, yellow > 20%, red < 20%) |
+| `saved $0.1575` | Money saved by prompt caching |
+
+### Line 3 — Current Task
+| Segment | Meaning |
+|---------|---------|
+| `> Implement auth system` | Active task from your plan (magenta) |
+| `$0.0847` | Cost accumulated on this specific task (cyan) |
+
+## How costs are calculated
+
+The `total_cost_usd` reported by Claude Code is the **actual API cost**, not an estimate. It's calculated server-side from the real token counts returned by each API call.
+
+### Pricing per model (per million tokens)
+
+| | Input | Output | Cache Write | Cache Read |
+|---|---:|---:|---:|---:|
+| **Opus 4.6** | $5.00 | $25.00 | $6.25 | $0.50 |
+| **Sonnet 4.6** | $3.00 | $15.00 | $3.75 | $0.30 |
+| **Haiku 4.5** | $1.00 | $5.00 | $1.25 | $0.10 |
+
+### Why this matters
+
+- **Output tokens cost 5x more than input** — that's why `in:` vs `out:` is shown separately
+- **Cache reads are 10x cheaper than fresh input** — high cache hit rate = significant savings
+- **The `saved` amount** shows exactly how much cache saved you vs. paying full input price
+- **Burn rate** (`$/min`) lets you gauge if a task is worth continuing or if you should change approach
+
+### Per-task cost tracking
+
+When you use plans (TodoWrite), claude-status captures cost snapshots when tasks start and complete. The delta gives you the exact cost of each task — so you know which tasks are expensive and can optimize accordingly.
 
 ## How it works
 
 claude-status hooks into two Claude Code extension points:
 
-1. **Status line** — runs after every message, captures token/cost data and renders the inline display
+1. **Status line** — runs after every message, captures token/cost data, shows colored inline display
 2. **Task hooks** — captures when plan tasks start/complete to calculate per-task cost
 
 ```
-Claude Code ──status line──> inline display + snapshot log
-             ──hooks───────> task lifecycle events
+Claude Code ──status line──> colored display + JSONL snapshot
+             ──hooks───────> task lifecycle events + cost deltas
 ```
 
-All data is stored locally in `~/.claude-status/sessions/` as JSONL files. Nothing is sent anywhere.
+All data is stored locally in `~/.claude-status/sessions/`. Nothing is sent anywhere.
 
 ## Installation
 
@@ -72,7 +110,7 @@ make build
 
 ### Download binary
 
-Download pre-built binaries from [Releases](https://github.com/oscarangulo/claude-status/releases) for:
+Download from [Releases](https://github.com/oscarangulo/claude-status/releases):
 
 | OS | Architecture | Binary |
 |----|-------------|--------|
@@ -118,14 +156,9 @@ claude-status history     # Show past session cost summaries
 ## Uninstalling
 
 ```bash
-# Remove hooks from Claude Code settings
-claude-status uninstall
-
-# Optionally remove all data
-rm -rf ~/.claude-status
+claude-status uninstall        # Remove hooks from Claude Code
+rm -rf ~/.claude-status        # Optionally remove all data
 ```
-
-Session data in `~/.claude-status/sessions/` is preserved by `uninstall` so you don't lose your history.
 
 ## Data storage
 
@@ -135,29 +168,29 @@ Session data in `~/.claude-status/sessions/` is preserved by `uninstall` so you 
   sessions/         # JSONL logs (one file per session)
 ```
 
-Each session file contains two types of entries:
+Each session file contains:
+- **Snapshots** — token counts, costs, context usage, model (after each message)
+- **Task events** — task started/completed with cost snapshot for delta calculation
 
-- **Snapshots** — token counts, costs, context usage (captured after each message)
-- **Task events** — task started/completed with cost at that moment
+## Optimization tips (TUI)
 
-## Optimization tips (built-in)
+The TUI dashboard (`claude-status` with no args) includes an optimization engine:
 
-The TUI dashboard (`claude-status` with no args) includes an optimization tips engine:
-
-- **Low cache hit rate** — suggests restructuring prompts
-- **High context usage** — reminds you to use `/compact`
-- **Expensive tasks** — flags tasks consuming disproportionate cost
-- **Low output/input ratio** — suggests targeted file reads
-- **High cost per line** — suggests using subagents
+- **Low cache hit rate** — restructure prompts for better caching
+- **High context usage** — use `/compact` before it overflows
+- **Expensive tasks** — break large tasks into smaller, cheaper ones
+- **Low output/input ratio** — use targeted reads instead of broad searches
+- **High cost per line** — parallelize with subagents
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Areas where help is especially welcome:
+See [CONTRIBUTING.md](CONTRIBUTING.md). Areas where help is welcome:
 
-- Windows testing
-- New optimization heuristics
-- Homebrew / AUR / Scoop packaging
-- Per-tool-call cost tracking
+- Windows testing ([#3](https://github.com/oscarangulo/claude-status/issues/3))
+- Unit tests ([#2](https://github.com/oscarangulo/claude-status/issues/2))
+- Homebrew formula ([#1](https://github.com/oscarangulo/claude-status/issues/1))
+- Per-subagent cost tracking ([#4](https://github.com/oscarangulo/claude-status/issues/4))
+- Budget alerts ([#5](https://github.com/oscarangulo/claude-status/issues/5))
 
 ## License
 
