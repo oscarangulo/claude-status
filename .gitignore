@@ -1,4 +1,4 @@
 bin/
-claude-status
+/claude-status
 *.exe
 .DS_Store
