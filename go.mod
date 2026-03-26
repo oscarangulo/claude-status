@@ -1,4 +1,4 @@
-module github.com/oscarandresrodriguez/claude-status
+module github.com/oscarangulo/claude-status
 
 go 1.24.2
 

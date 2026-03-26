@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/oscarandresrodriguez/claude-status/internal/model"
+	"github.com/oscarangulo/claude-status/internal/model"
 )
 
 type Watcher struct {

@@ -70,13 +70,13 @@ Claude Code ──status line──▶ snapshots.jsonl ──▶ ┌────
 ### From source
 
 ```bash
-go install github.com/oscarandresrodriguez/claude-status/cmd/claude-status@latest
+go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
 ```
 
 ### Build locally
 
 ```bash
-git clone https://github.com/oscarandresrodriguez/claude-status.git
+git clone https://github.com/oscarangulo/claude-status.git
 cd claude-status
 make build
 ```
@@ -139,7 +139,7 @@ No data is sent anywhere. Everything stays on your machine.
 Contributions welcome! This project is in early development.
 
 ```bash
-git clone https://github.com/oscarandresrodriguez/claude-status.git
+git clone https://github.com/oscarangulo/claude-status.git
 cd claude-status
 make build
 make test

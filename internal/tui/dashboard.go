@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/oscarandresrodriguez/claude-status/internal/analyzer"
-	"github.com/oscarandresrodriguez/claude-status/internal/model"
+	"github.com/oscarangulo/claude-status/internal/analyzer"
+	"github.com/oscarangulo/claude-status/internal/model"
 )
 
 func renderDashboard(a *analyzer.Analyzer, width int) string {

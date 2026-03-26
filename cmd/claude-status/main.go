@@ -8,12 +8,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
-	"github.com/oscarandresrodriguez/claude-status/internal/analyzer"
-	"github.com/oscarandresrodriguez/claude-status/internal/config"
-	"github.com/oscarandresrodriguez/claude-status/internal/installer"
-	"github.com/oscarandresrodriguez/claude-status/internal/model"
-	"github.com/oscarandresrodriguez/claude-status/internal/tui"
-	"github.com/oscarandresrodriguez/claude-status/internal/watcher"
+	"github.com/oscarangulo/claude-status/internal/analyzer"
+	"github.com/oscarangulo/claude-status/internal/config"
+	"github.com/oscarangulo/claude-status/internal/installer"
+	"github.com/oscarangulo/claude-status/internal/model"
+	"github.com/oscarangulo/claude-status/internal/tui"
+	"github.com/oscarangulo/claude-status/internal/watcher"
 )
 
 //go:embed hooks

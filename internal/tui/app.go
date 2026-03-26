@@ -5,9 +5,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/oscarandresrodriguez/claude-status/internal/analyzer"
-	"github.com/oscarandresrodriguez/claude-status/internal/model"
-	"github.com/oscarandresrodriguez/claude-status/internal/watcher"
+	"github.com/oscarangulo/claude-status/internal/analyzer"
+	"github.com/oscarangulo/claude-status/internal/model"
+	"github.com/oscarangulo/claude-status/internal/watcher"
 )
 
 // Messages
