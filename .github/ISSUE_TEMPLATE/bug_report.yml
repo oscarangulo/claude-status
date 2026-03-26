@@ -1,0 +1,55 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly
+      placeholder: "When I run claude-status install, it..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "I expected the status line to show..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `claude-status install`
+        2. Start a Claude Code session
+        3. ...
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu/Debian)
+        - Linux (Other)
+        - Windows (WSL)
+        - Windows (Git Bash)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: claude-status version
+      placeholder: "v0.1.0"
+
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code version
+      placeholder: "v2.1.83"
