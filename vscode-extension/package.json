@@ -1,0 +1,55 @@
+{
+  "name": "claude-status",
+  "displayName": "Claude Status",
+  "description": "Real-time token usage and cost monitoring for Claude Code — see costs, tokens, cache efficiency, and task progress in your status bar",
+  "version": "0.2.0",
+  "publisher": "oscarangulo",
+  "license": "MIT",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oscarangulo/claude-status"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "tokens",
+    "cost",
+    "monitoring",
+    "ai"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "claude-status.showDetails",
+        "title": "Claude Status: Show Session Details"
+      },
+      {
+        "command": "claude-status.refresh",
+        "title": "Claude Status: Refresh"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
