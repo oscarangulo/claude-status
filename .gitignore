@@ -1,0 +1,4 @@
+bin/
+claude-status
+*.exe
+.DS_Store
