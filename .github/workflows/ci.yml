@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: go build -v ./cmd/claude-status/
+
+      - name: Test
+        run: go test -v ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Vet
+        run: go vet ./...
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+          GOOS=darwin  GOARCH=amd64 go build -o dist/claude-status-darwin-amd64   ./cmd/claude-status/
+          GOOS=darwin  GOARCH=arm64 go build -o dist/claude-status-darwin-arm64   ./cmd/claude-status/
+          GOOS=linux   GOARCH=amd64 go build -o dist/claude-status-linux-amd64    ./cmd/claude-status/
+          GOOS=linux   GOARCH=arm64 go build -o dist/claude-status-linux-arm64    ./cmd/claude-status/
+          GOOS=windows GOARCH=amd64 go build -o dist/claude-status-windows-amd64.exe ./cmd/claude-status/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

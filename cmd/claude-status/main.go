@@ -39,13 +39,22 @@ func main() {
 		},
 	}
 
+	uninstallCmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove hooks from Claude Code settings",
+		Long:  "Removes status-line and task-tracking hooks from Claude Code. Session data is preserved.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return installer.Uninstall()
+		},
+	}
+
 	historyCmd := &cobra.Command{
 		Use:   "history",
 		Short: "Show past session summaries",
 		RunE:  runHistory,
 	}
 
-	rootCmd.AddCommand(installCmd, historyCmd)
+	rootCmd.AddCommand(installCmd, uninstallCmd, historyCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

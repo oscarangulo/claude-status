@@ -1,150 +1,164 @@
-# claude-status
+<p align="center">
+  <h1 align="center">claude-status</h1>
+  <p align="center">
+    Real-time token usage and cost monitoring for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>
+  </p>
+  <p align="center">
+    <a href="https://github.com/oscarangulo/claude-status/actions"><img src="https://github.com/oscarangulo/claude-status/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/oscarangulo/claude-status/releases"><img src="https://img.shields.io/github/v/release/oscarangulo/claude-status" alt="Release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/oscarangulo/claude-status" alt="License"></a>
+    <a href="https://goreportcard.com/report/github.com/oscarangulo/claude-status"><img src="https://goreportcard.com/badge/github.com/oscarangulo/claude-status" alt="Go Report Card"></a>
+  </p>
+</p>
 
-Real-time token usage and cost dashboard for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+---
 
-See exactly where your tokens go, how much each task in your plan costs, and get optimization tips — all in a live terminal dashboard.
+See exactly where your tokens go — directly in Claude Code's status bar. No extra terminal, no browser, no setup friction.
 
 ```
-╭──────────────────────────────────────────────────╮
-│  Claude Status | Claude Opus 4.6                 │
-│  Cost: $0.3200  Tokens: 125.3K  Duration: 6m32s │
-╰──────────────────────────────────────────────────╯
-╭──────────────────────────────────────────────────╮
-│  Context: ████████████░░░░░░░░░░░░░░░░░░  34%   │
-╰──────────────────────────────────────────────────╯
-╭──────────────────────────────────────────────────╮
-│  Token Breakdown                                 │
-│    Input:       89.2K                            │
-│    Output:      36.1K                            │
-│    Cache Read:  45.0K                            │
-│    Cache Write: 12.3K                            │
-│    Cache Hit:   62%                              │
-╰──────────────────────────────────────────────────╯
-╭──────────────────────────────────────────────────╮
-│  Plan Tasks                                      │
-│  ✓ Setup proyecto base       $0.0300  ███░  9%   │
-│  ✓ Modelo de usuarios        $0.0500  ████  16%  │
-│  ✓ Endpoint login            $0.0800  █████ 25%  │
-│  ● Tests e2e                 $0.1000  ██████ 31% │
-╰──────────────────────────────────────────────────╯
-╭──────────────────────────────────────────────────╮
-│  Tips                                            │
-│  • Cache hit rate: 62% — good prompt structure   │
-│  • "Tests e2e" is the most expensive task (31%)  │
-╰──────────────────────────────────────────────────╯
+$0.1847 | 91.0K tok | cache:43% | ██░░░ 48% | 6m32s | +210/-15 | ▸ Auth system $0.08
 ```
 
-## Features
+## What it shows
 
-- **Real-time cost tracking** — see cumulative cost and token usage update live
-- **Cost per task** — know exactly how much each step in your plan costs
-- **Token breakdown** — input, output, cache reads, cache writes
-- **Context window monitor** — visual progress bar with warnings
-- **Cache hit rate** — understand how well prompt caching is working
-- **Optimization tips** — actionable suggestions to reduce token spend
-- **Session history** — review past sessions and compare costs
+| Segment | Meaning |
+|---------|---------|
+| `$0.1847` | Total session cost |
+| `91.0K tok` | Total tokens (input + output) |
+| `cache:43%` | Cache hit rate — higher is better |
+| `██░░░ 48%` | Context window usage with visual bar |
+| `⚠` | Warning when context > 80% (use `/compact`) |
+| `6m32s` | Session duration |
+| `+210/-15` | Lines of code added/removed |
+| `▸ Auth system $0.08` | Current task and its cost so far |
 
 ## How it works
 
-claude-status uses two Claude Code extension points:
+claude-status hooks into two Claude Code extension points:
 
-1. **Status line script** — captures token/cost snapshots after every message
-2. **Hooks** — captures task lifecycle events (started, completed) from your plans
-
-The Go TUI watches the log files and renders everything in real-time.
+1. **Status line** — runs after every message, captures token/cost data and renders the inline display
+2. **Task hooks** — captures when plan tasks start/complete to calculate per-task cost
 
 ```
-Claude Code ──status line──▶ snapshots.jsonl ──▶ ┌─────────────┐
-             ──hooks──────▶ task events        ──▶ │ TUI Dashboard│
-                                                   └─────────────┘
+Claude Code ──status line──> inline display + snapshot log
+             ──hooks───────> task lifecycle events
 ```
 
-## Requirements
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and configured
-- [Go 1.22+](https://go.dev/dl/) (for building from source)
-- [jq](https://jqlang.github.io/jq/) (for the hook scripts)
+All data is stored locally in `~/.claude-status/sessions/` as JSONL files. Nothing is sent anywhere.
 
 ## Installation
+
+### Requirements
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
+- [jq](https://jqlang.github.io/jq/) — JSON processor used by hook scripts
+- [Go 1.22+](https://go.dev/dl/) (only for building from source)
+
+### Quick install
+
+```bash
+go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
+claude-status install
+```
 
 ### From source
 
 ```bash
-go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
-```
-
-### Build locally
-
-```bash
 git clone https://github.com/oscarangulo/claude-status.git
 cd claude-status
 make build
+./bin/claude-status install
 ```
 
-### Configure hooks
+### Download binary
 
-Run the installer to automatically configure Claude Code:
+Download pre-built binaries from [Releases](https://github.com/oscarangulo/claude-status/releases) for:
+
+| OS | Architecture | Binary |
+|----|-------------|--------|
+| macOS | Apple Silicon (M1+) | `claude-status-darwin-arm64` |
+| macOS | Intel | `claude-status-darwin-amd64` |
+| Linux | x86_64 | `claude-status-linux-amd64` |
+| Linux | ARM64 | `claude-status-linux-arm64` |
+| Windows | x86_64 | `claude-status-windows-amd64.exe` |
 
 ```bash
-claude-status install
+# Example: macOS Apple Silicon
+curl -L https://github.com/oscarangulo/claude-status/releases/latest/download/claude-status-darwin-arm64 -o claude-status
+chmod +x claude-status
+./claude-status install
 ```
 
-This will:
-1. Copy hook scripts to `~/.claude-status/hooks/`
-2. Update `~/.claude/settings.json` with status line and hook configuration
-3. Create a backup of your existing settings
+### What `install` does
 
-Then restart Claude Code.
+1. Copies hook scripts to `~/.claude-status/hooks/`
+2. Configures `~/.claude/settings.json` with status line and hooks
+3. Creates a backup of your existing settings
 
-## Usage
+Restart Claude Code after installing.
 
-Open a **second terminal** alongside Claude Code and run:
+## Platform support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS | Fully supported | Tested on Apple Silicon and Intel |
+| Linux | Fully supported | Any distro with bash and jq |
+| Windows (WSL) | Supported | Claude Code runs in WSL with full bash |
+| Windows (Git Bash) | Supported | Hook scripts work in Git Bash |
+
+## Commands
 
 ```bash
-claude-status
+claude-status install     # Configure hooks in Claude Code
+claude-status uninstall   # Remove hooks (keeps session data)
+claude-status             # TUI dashboard (optional, extra terminal)
+claude-status history     # Show past session cost summaries
 ```
 
-The dashboard updates in real-time as Claude Code works.
+## Uninstalling
 
-### Commands
+```bash
+# Remove hooks from Claude Code settings
+claude-status uninstall
 
-| Command | Description |
-|---------|-------------|
-| `claude-status` | Launch live dashboard |
-| `claude-status install` | Install hooks into Claude Code |
-| `claude-status history` | Show past session summaries |
+# Optionally remove all data
+rm -rf ~/.claude-status
+```
 
-### Keyboard shortcuts
-
-| Key | Action |
-|-----|--------|
-| `q` / `Ctrl+C` | Quit |
-| `r` | Force refresh |
-| `?` | Toggle help |
+Session data in `~/.claude-status/sessions/` is preserved by `uninstall` so you don't lose your history.
 
 ## Data storage
 
-All data is stored locally in `~/.claude-status/`:
-
 ```
 ~/.claude-status/
-  sessions/         # JSONL log files (one per session)
   hooks/            # Installed hook scripts
+  sessions/         # JSONL logs (one file per session)
 ```
 
-No data is sent anywhere. Everything stays on your machine.
+Each session file contains two types of entries:
+
+- **Snapshots** — token counts, costs, context usage (captured after each message)
+- **Task events** — task started/completed with cost at that moment
+
+## Optimization tips (built-in)
+
+The TUI dashboard (`claude-status` with no args) includes an optimization tips engine:
+
+- **Low cache hit rate** — suggests restructuring prompts
+- **High context usage** — reminds you to use `/compact`
+- **Expensive tasks** — flags tasks consuming disproportionate cost
+- **Low output/input ratio** — suggests targeted file reads
+- **High cost per line** — suggests using subagents
 
 ## Contributing
 
-Contributions welcome! This project is in early development.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Areas where help is especially welcome:
 
-```bash
-git clone https://github.com/oscarangulo/claude-status.git
-cd claude-status
-make build
-make test
-```
+- Windows testing
+- New optimization heuristics
+- Homebrew / AUR / Scoop packaging
+- Per-tool-call cost tracking
 
 ## License
 
-MIT
+[MIT](LICENSE)
