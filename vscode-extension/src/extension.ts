@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import * as path from 'path';
 import {
   getSessionsDir,
   getActiveSessionFile,
@@ -47,7 +46,7 @@ function startWatching() {
     return;
   }
   try {
-    watcher = fs.watch(dir, (eventType, filename) => {
+    watcher = fs.watch(dir, (_eventType, filename) => {
       if (filename && filename.endsWith('.jsonl')) {
         updateStatusBar();
       }
@@ -60,8 +59,14 @@ function startWatching() {
 function updateStatusBar() {
   const file = getActiveSessionFile();
   if (!file) {
-    statusBarItem.text = '$(pulse) Claude: no active session';
-    statusBarItem.tooltip = 'Waiting for a Claude Code session.\nMake sure hooks are installed: claude-status install';
+    statusBarItem.text = '$(pulse) Claude: no sessions yet';
+    statusBarItem.tooltip = new vscode.MarkdownString(
+      '**No session data found**\n\n' +
+      'Make sure hooks are installed:\n\n' +
+      '```\nclaude-status install\n```\n\n' +
+      'Then start a new Claude Code session.\n\n' +
+      '_Data appears in `~/.claude-status/sessions/`_'
+    );
     statusBarItem.show();
     detailBarItem.hide();
     return;
@@ -76,7 +81,14 @@ function updateStatusBar() {
 
   const m = computeMetrics(session);
   if (!m) {
-    statusBarItem.text = '$(pulse) Claude: starting...';
+    statusBarItem.text = '$(pulse) Claude: waiting for data...';
+    statusBarItem.tooltip = new vscode.MarkdownString(
+      '**Session found but no cost data yet**\n\n' +
+      'This can happen if:\n' +
+      '- The session started before hooks were installed\n' +
+      '- Claude Code hasn\'t responded yet in this session\n\n' +
+      'Try starting a **new Claude Code session** and the data will appear automatically.'
+    );
     statusBarItem.show();
     detailBarItem.hide();
     return;
