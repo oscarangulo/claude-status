@@ -136,49 +136,17 @@ function buildTooltip(m: ReturnType<typeof computeMetrics>): vscode.MarkdownStri
   md.isTrusted = true;
   md.supportThemeIcons = true;
 
-  md.appendMarkdown(`### $(pulse) Claude Status\n\n`);
-  md.appendMarkdown(`**Model:** ${m.model}\n\n`);
-  md.appendMarkdown(`---\n\n`);
-
-  md.appendMarkdown(`#### Cost\n`);
-  md.appendMarkdown(`| | |\n|---|---|\n`);
-  md.appendMarkdown(`| Total | **$${m.cost.toFixed(4)}** |\n`);
-  if (m.burnRate > 0) {
-    md.appendMarkdown(`| Burn rate | $${m.burnRate.toFixed(4)}/min |\n`);
-  }
-  md.appendMarkdown(`| Duration | ${m.duration} |\n\n`);
-
-  md.appendMarkdown(`#### Tokens\n`);
-  md.appendMarkdown(`| | |\n|---|---|\n`);
-  md.appendMarkdown(`| Input | ${formatTokens(m.inputTokens)} |\n`);
-  md.appendMarkdown(`| Output | ${formatTokens(m.outputTokens)} _(5x cost)_ |\n`);
-  md.appendMarkdown(`| Cache read | ${formatTokens(m.cacheReadTokens)} _(10x cheaper)_ |\n`);
-  md.appendMarkdown(`| Cache write | ${formatTokens(m.cacheWriteTokens)} |\n`);
-  md.appendMarkdown(`| Cache hit rate | **${m.cacheHitRate.toFixed(0)}%** |\n`);
-  if (m.cacheSavings > 0.001) {
-    md.appendMarkdown(`| Cache savings | **$${m.cacheSavings.toFixed(4)}** |\n`);
-  }
-  md.appendMarkdown(`\n`);
-
-  md.appendMarkdown(`#### Context\n`);
-  const bar = '█'.repeat(Math.floor(m.contextPct / 10)) + '░'.repeat(10 - Math.floor(m.contextPct / 10));
-  md.appendMarkdown(`${bar} **${m.contextPct}%**`);
-  if (m.contextPct >= 80) {
-    md.appendMarkdown(` $(warning) Use \`/compact\``);
-  }
+  // Compact tooltip — full details on click
+  md.appendMarkdown(`**${m.model}** | $${m.cost.toFixed(4)}`);
+  if (m.burnRate > 0) { md.appendMarkdown(` | ${m.burnRate.toFixed(3)}/min`); }
   md.appendMarkdown(`\n\n`);
-
-  if (m.linesAdded > 0 || m.linesRemoved > 0) {
-    md.appendMarkdown(`#### Code\n`);
-    md.appendMarkdown(`+${m.linesAdded} / -${m.linesRemoved} lines\n\n`);
-  }
-
+  md.appendMarkdown(`in:${formatTokens(m.inputTokens)} out:${formatTokens(m.outputTokens)} | cache:${m.cacheHitRate.toFixed(0)}%`);
+  if (m.cacheSavings > 0.001) { md.appendMarkdown(` saved $${m.cacheSavings.toFixed(4)}`); }
+  md.appendMarkdown(`\n\n`);
   if (m.currentTask) {
-    md.appendMarkdown(`---\n\n`);
-    md.appendMarkdown(`#### $(play) Current Task\n`);
-    md.appendMarkdown(`**${m.currentTask.subject}**\n\n`);
-    md.appendMarkdown(`Cost so far: **$${m.currentTask.costDelta.toFixed(4)}**\n`);
+    md.appendMarkdown(`$(play) ${m.currentTask.subject} **$${m.currentTask.costDelta.toFixed(4)}**\n\n`);
   }
+  md.appendMarkdown(`_Click for full details_`);
 
   return md;
 }
