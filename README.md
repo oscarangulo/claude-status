@@ -148,10 +148,45 @@ Restart Claude Code after installing.
 
 ```bash
 claude-status install     # Configure hooks in Claude Code
+claude-status update      # Update hooks after upgrading the binary
 claude-status uninstall   # Remove hooks (keeps session data)
 claude-status             # TUI dashboard (optional, extra terminal)
 claude-status history     # Show past session cost summaries
+claude-status --version   # Show installed version
 ```
+
+## Updating
+
+When a new version is released, update the binary and then run `update` to refresh the hook scripts:
+
+### If installed with `go install`
+
+```bash
+go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
+claude-status update
+```
+
+### If installed from source
+
+```bash
+cd claude-status
+git pull
+make build
+./bin/claude-status update
+```
+
+### If using a downloaded binary
+
+```bash
+# Download the new binary (same as install)
+curl -L https://github.com/oscarangulo/claude-status/releases/latest/download/claude-status-darwin-arm64 -o claude-status
+chmod +x claude-status
+./claude-status update
+```
+
+`update` re-extracts the hook scripts from the binary and updates `~/.claude/settings.json`. Your session data is preserved. Restart Claude Code after updating.
+
+> **Why is `update` needed?** The status line and task hooks are bash scripts that live in `~/.claude-status/hooks/`. When you upgrade the binary, the new scripts are embedded inside it but not yet copied to disk. `update` (or `install`) copies them.
 
 ## Uninstalling
 

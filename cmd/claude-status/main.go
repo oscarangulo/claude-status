@@ -16,18 +16,20 @@ import (
 	"github.com/oscarangulo/claude-status/internal/watcher"
 )
 
+var version = "dev"
+
 //go:embed hooks
 var hookFiles embed.FS
 
 func main() {
-	// Pass embedded hooks to the installer
 	installer.HookFiles = hookFiles
 
 	rootCmd := &cobra.Command{
-		Use:   "claude-status",
-		Short: "Real-time token usage and cost dashboard for Claude Code",
-		Long:  "Monitor your Claude Code sessions in real-time. See token usage, cost breakdowns per task, and optimization tips.",
-		RunE:  runDashboard,
+		Use:     "claude-status",
+		Short:   "Real-time token usage and cost dashboard for Claude Code",
+		Long:    "Monitor your Claude Code sessions in real-time. See token usage, cost breakdowns per task, and optimization tips.",
+		Version: version,
+		RunE:    runDashboard,
 	}
 
 	installCmd := &cobra.Command{
@@ -35,6 +37,7 @@ func main() {
 		Short: "Install hooks into Claude Code settings",
 		Long:  "Configures Claude Code with the status-line and task-tracking hooks needed for monitoring.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("claude-status %s\n\n", version)
 			return installer.Install()
 		},
 	}
@@ -48,13 +51,24 @@ func main() {
 		},
 	}
 
+	updateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update hook scripts to the latest version",
+		Long:  "Re-installs hook scripts from the current binary. Run this after upgrading claude-status to get the latest status line features.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("claude-status %s\n\n", version)
+			fmt.Println("Updating hook scripts...")
+			return installer.Install()
+		},
+	}
+
 	historyCmd := &cobra.Command{
 		Use:   "history",
 		Short: "Show past session summaries",
 		RunE:  runHistory,
 	}
 
-	rootCmd.AddCommand(installCmd, uninstallCmd, historyCmd)
+	rootCmd.AddCommand(installCmd, uninstallCmd, updateCmd, historyCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -70,7 +84,6 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	a := analyzer.New()
 	w := watcher.New(cfg.SessionDir)
 
-	// Load existing active session
 	activeFile, err := cfg.ActiveSessionFile()
 	if err != nil {
 		return fmt.Errorf("cannot find session files: %w", err)
@@ -80,7 +93,6 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 		session, err := model.ParseSessionFile(activeFile)
 		if err == nil && session != nil {
 			a.LoadSession(session)
-			// Set watcher offset to end of file so it only picks up new entries
 			if info, err := os.Stat(activeFile); err == nil {
 				w.SetOffset(activeFile, info.Size())
 			}
@@ -107,7 +119,7 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Session History")
-	fmt.Println(fmt.Sprintf("%-20s %-10s %-12s %-10s %s", "Session", "Cost", "Tokens", "Tasks", "Cache Hit"))
+	fmt.Printf("%-20s %-10s %-12s %-10s %s\n", "Session", "Cost", "Tokens", "Tasks", "Cache Hit")
 	fmt.Println("─────────────────────────────────────────────────────────────────")
 
 	for _, f := range files {

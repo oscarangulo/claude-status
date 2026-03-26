@@ -54,12 +54,14 @@ jobs:
 
       - name: Build binaries
         run: |
+          VERSION=${GITHUB_REF_NAME}
+          LDFLAGS="-s -w -X main.version=${VERSION}"
           mkdir -p dist
-          GOOS=darwin  GOARCH=amd64 go build -o dist/claude-status-darwin-amd64   ./cmd/claude-status/
-          GOOS=darwin  GOARCH=arm64 go build -o dist/claude-status-darwin-arm64   ./cmd/claude-status/
-          GOOS=linux   GOARCH=amd64 go build -o dist/claude-status-linux-amd64    ./cmd/claude-status/
-          GOOS=linux   GOARCH=arm64 go build -o dist/claude-status-linux-arm64    ./cmd/claude-status/
-          GOOS=windows GOARCH=amd64 go build -o dist/claude-status-windows-amd64.exe ./cmd/claude-status/
+          GOOS=darwin  GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/claude-status-darwin-amd64   ./cmd/claude-status/
+          GOOS=darwin  GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/claude-status-darwin-arm64   ./cmd/claude-status/
+          GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/claude-status-linux-amd64    ./cmd/claude-status/
+          GOOS=linux   GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/claude-status-linux-arm64    ./cmd/claude-status/
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/claude-status-windows-amd64.exe ./cmd/claude-status/
 
       - name: Create release
         uses: softprops/action-gh-release@v2
