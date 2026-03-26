@@ -15,35 +15,42 @@
 
 ### Status Bar (always visible)
 
-**Line 1 — Cost & Tokens**
-- Total session cost (color-coded: green < $0.50, yellow < $1, red > $1)
-- Token count with input/output breakdown
-- Burn rate ($/min) — your spending speed
+**Line 1 — What you're spending**
+```
+Spent $0.3500 ($0.035/min) | 30m0s | 210 added, 15 removed
+```
+- How much you've spent and how fast
 - Session duration
-- Lines of code changed (+added/-removed)
+- Lines of code changed
 
-**Line 2 — Context & Cache**
-- Context window usage with warning at 80%
-- Cache hit rate (higher = cheaper)
-- Money saved by prompt caching
-- Current task name and its cost
+**Line 2 — Memory and savings**
+```
+Memory 34% | Saved $0.1575 from cache
+```
+- How full Claude's memory is (warning at 80%)
+- How much money cache saved you
+- Current task and its cost
 
-### Click for Details
+### Hover — Quick summary
 
-Click the status bar for a detailed breakdown panel showing:
-- Full cost and token metrics
-- Per-task cost history
-- Cache savings
-- Context usage
+```
+Claude Opus 4.6 — Session cost: $0.4200
+Spending $0.014 per minute
+Reading 85.0K tokens, writing 22.0K tokens
+Cache saved you $0.1800 (47% reused)
+Click for full breakdown
+```
 
-### Hover Tooltip
+### Click — Full breakdown
 
-Hover over the status bar for a rich markdown tooltip with:
-- Model name
-- Cost table (total, burn rate, duration)
-- Token breakdown (input, output, cache read/write)
-- Context usage bar
-- Current task progress
+Click the status bar to see everything in a scrollable panel:
+- Total spent and spending speed
+- Tokens used (reading vs writing)
+- Cache savings and reuse percentage
+- Memory used (how much remaining)
+- Code changes
+- Current task with cost
+- Completed tasks with individual costs
 
 ## Requirements
 
