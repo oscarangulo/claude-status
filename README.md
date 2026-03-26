@@ -61,26 +61,67 @@ $0.3500 | 91.0K (in:45.0K out:12.0K) | 0.035/min | 10m0s | +210/-15
 
 ## How costs are calculated
 
-The `total_cost_usd` reported by Claude Code is the **actual API cost**, not an estimate. It's calculated server-side from the real token counts returned by each API call.
+### The `total_cost_usd` field
+
+The cost shown in the status bar comes directly from Claude Code's `total_cost_usd` field. This is the **actual API cost**, not an estimate — it's calculated server-side from the real token counts returned by each API call, including all cache discounts. We don't recalculate the total.
+
+### What we calculate ourselves
+
+claude-status uses the official pricing to calculate two additional metrics:
+
+1. **Cache savings** — how much money prompt caching saved you:
+   ```
+   savings = cache_read_tokens × (input_price - cache_read_price)
+   ```
+   Example (Opus): 35,000 cache reads = 35K × ($5.00 - $0.50) / 1M = **$0.1575 saved**
+
+2. **Burn rate** — your spending speed:
+   ```
+   burn_rate = total_cost / session_duration_minutes
+   ```
 
 ### Pricing per model (per million tokens)
 
-| | Input | Output | Cache Write | Cache Read |
-|---|---:|---:|---:|---:|
-| **Opus 4.6** | $5.00 | $25.00 | $6.25 | $0.50 |
-| **Sonnet 4.6** | $3.00 | $15.00 | $3.75 | $0.30 |
-| **Haiku 4.5** | $1.00 | $5.00 | $1.25 | $0.10 |
+| | Input | Output | Cache Write (5min) | Cache Write (1hr) | Cache Read |
+|---|---:|---:|---:|---:|---:|
+| **Opus 4.6** | $5.00 | $25.00 | $6.25 | $10.00 | $0.50 |
+| **Sonnet 4.6** | $3.00 | $15.00 | $3.75 | $6.00 | $0.30 |
+| **Haiku 4.5** | $1.00 | $5.00 | $1.25 | $2.00 | $0.10 |
 
-### Why this matters
+### Example breakdown (Opus, single turn)
 
-- **Output tokens cost 5x more than input** — that's why `in:` vs `out:` is shown separately
-- **Cache reads are 10x cheaper than fresh input** — high cache hit rate = significant savings
-- **The `saved` amount** shows exactly how much cache saved you vs. paying full input price
-- **Burn rate** (`$/min`) lets you gauge if a task is worth continuing or if you should change approach
+| Type | Tokens | Price/MTok | Cost |
+|------|-------:|-----------:|-----:|
+| Input | 45,000 | $5.00 | $0.2250 |
+| Output | 12,000 | $25.00 | $0.3000 |
+| Cache read | 35,000 | $0.50 | $0.0175 |
+| Cache write | 8,000 | $6.25 | $0.0500 |
+| **Total** | | | **$0.5925** |
+| Cache savings | | | **$0.1575** |
+
+> The cache savings represent what those 35K cache reads would have cost at full input price ($0.175) minus what they actually cost ($0.0175).
+
+### Key insights
+
+- **Output tokens cost 5x more than input** — that's why `in:` vs `out:` is shown separately. A task that generates a lot of code costs more than one that reads a lot of files.
+- **Cache reads are 10x cheaper than fresh input** — a high cache hit rate means significant savings. Structured, consistent prompts maximize cache reuse.
+- **The `saved` amount** shows real dollars saved. If your cache hit rate is 80%, you're paying 10x less for 80% of your input tokens.
+- **Burn rate** (`$/min`) lets you gauge if a task is worth continuing or if you should change approach. High burn rate = consider breaking the task into smaller pieces.
 
 ### Per-task cost tracking
 
-When you use plans (TodoWrite), claude-status captures cost snapshots when tasks start and complete. The delta gives you the exact cost of each task — so you know which tasks are expensive and can optimize accordingly.
+When you use plans (TodoWrite), claude-status captures a cost snapshot when each task starts and completes. The delta gives you the exact cost of each task:
+
+```
+task_cost = cost_at_completion - cost_at_start
+```
+
+This lets you compare tasks: "Auth took $0.08, but Tests took $0.15 — maybe I should break up test tasks."
+
+### Limitations
+
+- Cache write prices assume the 5-minute TTL. The 1-hour TTL is more expensive but Claude Code doesn't expose which TTL is used.
+- Cost per task is approximate — the snapshot is taken when the hook fires, which may be slightly after the actual API call.
 
 ## How it works
 
