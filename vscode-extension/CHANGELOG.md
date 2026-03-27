@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.11 (2026-03-27)
+
+- Align the VS Code extension release line with the CLI uninstall cleanup improvements in `v0.4.11`
+- Keep Marketplace users on the latest release train while the CLI now removes `~/.local/bin` PATH entries and broader extension folder variants during full cleanup
+
 ## 0.4.10 (2026-03-27)
 
 - Fix session selection so the VS Code extension ignores side sessions like Claude Mem observer logs and subagent JSONL files

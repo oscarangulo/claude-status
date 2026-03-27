@@ -216,6 +216,9 @@ func Uninstall(opts UninstallOptions) error {
 				fmt.Printf("  Removed %s\n", path)
 			}
 		}
+		if cleaned, err := removeShellPathEntry(home); err == nil && cleaned != "" {
+			fmt.Printf("  Removed %s from %s\n", filepath.Join(home, ".local", "bin"), cleaned)
+		}
 		for _, path := range installedExtensionPaths(home) {
 			if err := os.RemoveAll(path); err == nil {
 				fmt.Printf("  Removed %s\n", path)
@@ -490,6 +493,48 @@ func ensureShellPathEntry(home, installDir string) error {
 	return nil
 }
 
+func removeShellPathEntry(home string) (string, error) {
+	installDir := filepath.Join(home, ".local", "bin")
+	pathExport := `export PATH="$HOME/.local/bin:$PATH"`
+	candidates := []string{
+		filepath.Join(home, ".zshrc"),
+		filepath.Join(home, ".bashrc"),
+	}
+
+	for _, shellRC := range candidates {
+		content, err := os.ReadFile(shellRC)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", fmt.Errorf("cannot read %s: %w", shellRC, err)
+		}
+
+		lines := strings.Split(string(content), "\n")
+		kept := make([]string, 0, len(lines))
+		changed := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == pathExport || strings.Contains(trimmed, installDir) {
+				changed = true
+				continue
+			}
+			kept = append(kept, line)
+		}
+		if !changed {
+			continue
+		}
+
+		updated := strings.TrimRight(strings.Join(kept, "\n"), "\n") + "\n"
+		if err := os.WriteFile(shellRC, []byte(updated), 0644); err != nil {
+			return "", fmt.Errorf("cannot update %s: %w", shellRC, err)
+		}
+		return shellRC, nil
+	}
+
+	return "", nil
+}
+
 func preferredShellRC(home string) string {
 	zshrc := filepath.Join(home, ".zshrc")
 	if _, err := os.Stat(zshrc); err == nil {
@@ -521,9 +566,13 @@ func installedBinaryPaths(home string) []string {
 func installedExtensionPaths(home string) []string {
 	patterns := []string{
 		filepath.Join(home, ".cursor", "extensions", "oscarangulo.claude-status-*"),
+		filepath.Join(home, ".cursor", "extensions", "OscarAngulo.claude-status-*"),
 		filepath.Join(home, ".vscode", "extensions", "oscarangulo.claude-status-*"),
+		filepath.Join(home, ".vscode", "extensions", "OscarAngulo.claude-status-*"),
 		filepath.Join(home, ".cursor-insiders", "extensions", "oscarangulo.claude-status-*"),
+		filepath.Join(home, ".cursor-insiders", "extensions", "OscarAngulo.claude-status-*"),
 		filepath.Join(home, ".vscode-insiders", "extensions", "oscarangulo.claude-status-*"),
+		filepath.Join(home, ".vscode-insiders", "extensions", "OscarAngulo.claude-status-*"),
 	}
 	var paths []string
 	for _, pattern := range patterns {
