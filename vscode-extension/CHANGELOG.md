@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.10 (2026-03-27)
+
+- Fix session selection so the VS Code extension ignores side sessions like Claude Mem observer logs and subagent JSONL files
+- Pick the newest Claude Code session that actually contains usable assistant usage metrics instead of falling back to `waiting for next response`
+
 ## 0.4.9 (2026-03-27)
 
 - Fix the VS Code extension so active Claude Code sessions show usage immediately even when `~/.claude-status/sessions` snapshots are empty

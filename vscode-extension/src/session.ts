@@ -69,6 +69,7 @@ function listProjectSessionFiles(): string[] {
   const files: string[] = [];
   for (const entry of fs.readdirSync(projectsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) { continue; }
+    if (entry.name.includes('claude-mem-observer-sessions')) { continue; }
     const dirPath = path.join(projectsDir, entry.name);
     for (const child of fs.readdirSync(dirPath, { withFileTypes: true })) {
       if (!child.isFile()) { continue; }
@@ -79,6 +80,35 @@ function listProjectSessionFiles(): string[] {
   }
 
   return files;
+}
+
+function fileHasUsableMetrics(filePath: string): boolean {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) { continue; }
+      try {
+        const entry = JSON.parse(trimmed);
+        if (entry.type === 'snapshot') {
+          return true;
+        }
+        if (
+          entry.type === 'assistant' &&
+          entry.message?.usage &&
+          !entry.isSidechain &&
+          (entry.entrypoint === 'claude-vscode' || entry.entrypoint === 'cli')
+        ) {
+          return true;
+        }
+      } catch {
+        // skip malformed lines
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 export function getActiveSessionFile(): string | null {
@@ -99,6 +129,8 @@ export function getActiveSessionFile(): string | null {
         return false;
       }
     })
+    .filter(file => !file.includes('/subagents/'))
+    .filter(file => fileHasUsableMetrics(file))
     .map(file => ({
       name: file,
       mtime: fs.statSync(file).mtimeMs,
