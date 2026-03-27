@@ -44,12 +44,21 @@ func main() {
 
 	uninstallCmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Remove hooks from Claude Code settings",
-		Long:  "Removes status-line and task-tracking hooks from Claude Code. Session data is preserved.",
+		Short: "Remove Claude Status from Claude Code",
+		Long:  "Interactively removes Claude Status setup, with optional cleanup for local data, binaries, and local IDE extensions.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return installer.Uninstall()
+			mode, _ := cmd.Flags().GetString("mode")
+			yes, _ := cmd.Flags().GetBool("yes")
+			return installer.Uninstall(installer.UninstallOptions{
+				Mode: installer.UninstallMode(mode),
+				Yes:  yes,
+				In:   os.Stdin,
+				Out:  os.Stdout,
+			})
 		},
 	}
+	uninstallCmd.Flags().String("mode", "", "cleanup mode: setup, data, or full")
+	uninstallCmd.Flags().Bool("yes", false, "skip prompts and use the selected mode (defaults to setup)")
 
 	updateCmd := &cobra.Command{
 		Use:   "update",

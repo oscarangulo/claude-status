@@ -91,6 +91,8 @@ Claude Code ──hooks──> ~/.claude-status/sessions/*.jsonl
 |---------|-------------|
 | `Claude Status: Show Session Details` | Open detailed breakdown panel |
 | `Claude Status: Refresh` | Force refresh the status bar |
+| `Claude Status: Set Up Claude Code` | Install the Claude Code hooks automatically |
+| `Claude Status: Remove Claude Code Setup` | Remove setup only, or setup plus local data |
 
 ## Status bar icons
 

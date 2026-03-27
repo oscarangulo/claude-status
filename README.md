@@ -143,7 +143,7 @@ All data is stored locally in `~/.claude-status/sessions/`. Nothing is sent anyw
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 - [jq](https://jqlang.github.io/jq/) — JSON processor used by hook scripts
-- [Go 1.22+](https://go.dev/dl/) (only for building from source)
+- [Go 1.24+](https://go.dev/dl/) (only for building from source)
 
 ### Option 1: Homebrew (macOS / Linux)
 
@@ -231,7 +231,7 @@ Restart Claude Code after installing.
 ```bash
 claude-status install     # Configure hooks in Claude Code
 claude-status update      # Upgrade the binary when possible, then refresh hooks
-claude-status uninstall   # Remove hooks (keeps session data)
+claude-status uninstall   # Interactive cleanup for setup, data, or full removal
 claude-status             # TUI dashboard (optional, extra terminal)
 claude-status history     # Show past session cost summaries
 claude-status --version   # Show installed version
@@ -284,8 +284,21 @@ chmod +x claude-status
 ## Uninstalling
 
 ```bash
-claude-status uninstall        # Remove hooks from Claude Code
-rm -rf ~/.claude-status        # Optionally remove all data
+claude-status uninstall
+```
+
+The CLI now asks what you want to remove so cleanup happens in one run:
+
+- `setup` removes Claude Code hooks and settings changes but keeps local history
+- `data` removes setup plus `~/.claude-status`
+- `full` removes setup, local data, local `claude-status` binaries, and local VS Code/Cursor extension installs
+
+For scripts and automation:
+
+```bash
+claude-status uninstall --mode setup --yes
+claude-status uninstall --mode data --yes
+claude-status uninstall --mode full --yes
 ```
 
 ## Data storage

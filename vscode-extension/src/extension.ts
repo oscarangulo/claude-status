@@ -71,14 +71,25 @@ async function runInstall() {
 
 async function runUninstall() {
   const answer = await vscode.window.showWarningMessage(
-    'Remove Claude Status hooks from Claude Code? Your session history will be preserved.',
-    'Yes, remove hooks',
+    'Choose how much Claude Status you want to remove from this machine.',
+    { modal: true },
+    'Remove setup only',
+    'Remove setup + local data',
     'Cancel',
   );
-  if (answer === 'Yes, remove hooks') {
-    const success = await uninstallHooks();
+
+  if (answer === 'Remove setup only') {
+    const success = await uninstallHooks('setup');
     if (success) {
-      vscode.window.showInformationMessage('Hooks removed. Session data preserved in ~/.claude-status/sessions/');
+      vscode.window.showInformationMessage('Claude Status setup removed. Session data was preserved in ~/.claude-status/sessions/.');
+    }
+    return;
+  }
+
+  if (answer === 'Remove setup + local data') {
+    const success = await uninstallHooks('data');
+    if (success) {
+      vscode.window.showInformationMessage('Claude Status setup and local data were removed.');
     }
   }
 }

@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"bufio"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,21 @@ type hookEntry struct {
 type hookAction struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
+}
+
+type UninstallMode string
+
+const (
+	UninstallModeSetup UninstallMode = "setup"
+	UninstallModeData  UninstallMode = "data"
+	UninstallModeFull  UninstallMode = "full"
+)
+
+type UninstallOptions struct {
+	Mode UninstallMode
+	Yes  bool
+	In   io.Reader
+	Out  io.Writer
 }
 
 func Install() error {
@@ -154,7 +170,28 @@ func Update(refreshOnly bool) error {
 	return runBinary(updatedPath, "update", "--refresh-only")
 }
 
-func Uninstall() error {
+func Uninstall(opts UninstallOptions) error {
+	if opts.In == nil {
+		opts.In = os.Stdin
+	}
+	if opts.Out == nil {
+		opts.Out = os.Stdout
+	}
+	if opts.Mode == "" {
+		if opts.Yes {
+			opts.Mode = UninstallModeSetup
+		} else {
+			mode, err := promptUninstallMode(opts.In, opts.Out)
+			if err != nil {
+				return err
+			}
+			opts.Mode = mode
+		}
+	}
+	if !isValidUninstallMode(opts.Mode) {
+		return fmt.Errorf("invalid uninstall mode %q", opts.Mode)
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("cannot find home directory: %w", err)
@@ -163,6 +200,44 @@ func Uninstall() error {
 	dataDir := filepath.Join(home, ".claude-status")
 	hooksDir := filepath.Join(dataDir, "hooks")
 
+	if err := removeClaudeSetup(home, hooksDir); err != nil {
+		return err
+	}
+
+	if opts.Mode == UninstallModeData || opts.Mode == UninstallModeFull {
+		if err := os.RemoveAll(dataDir); err == nil {
+			fmt.Printf("  Removed %s\n", dataDir)
+		}
+	}
+
+	if opts.Mode == UninstallModeFull {
+		for _, path := range installedBinaryPaths(home) {
+			if err := os.Remove(path); err == nil {
+				fmt.Printf("  Removed %s\n", path)
+			}
+		}
+		for _, path := range installedExtensionPaths(home) {
+			if err := os.RemoveAll(path); err == nil {
+				fmt.Printf("  Removed %s\n", path)
+			}
+		}
+	}
+
+	fmt.Fprintln(opts.Out)
+	switch opts.Mode {
+	case UninstallModeSetup:
+		fmt.Fprintln(opts.Out, "Uninstall complete. Session data preserved in ~/.claude-status/sessions/")
+		fmt.Fprintln(opts.Out, "To remove all data: run 'claude-status uninstall --mode data --yes'")
+	case UninstallModeData:
+		fmt.Fprintln(opts.Out, "Uninstall complete. Claude Code setup and local session data were removed.")
+	case UninstallModeFull:
+		fmt.Fprintln(opts.Out, "Full cleanup complete. Claude Code setup, local data, local binaries, and local IDE extensions were removed.")
+	}
+
+	return nil
+}
+
+func removeClaudeSetup(home, hooksDir string) error {
 	claudeDir := filepath.Join(home, ".claude")
 	settingsPath := filepath.Join(claudeDir, "settings.json")
 
@@ -223,10 +298,6 @@ func Uninstall() error {
 		}
 	}
 	os.Remove(hooksDir)
-
-	fmt.Println("\nUninstall complete. Session data preserved in ~/.claude-status/sessions/")
-	fmt.Println("To remove all data: rm -rf ~/.claude-status")
-
 	return nil
 }
 
@@ -324,6 +395,40 @@ func ensureBinaryAvailable(home string) (string, error) {
 	return dest, nil
 }
 
+func promptUninstallMode(in io.Reader, out io.Writer) (UninstallMode, error) {
+	fmt.Fprintln(out, "Choose what to remove:")
+	fmt.Fprintln(out, "  1) Claude Code setup only (keep sessions and binaries)")
+	fmt.Fprintln(out, "  2) Setup + local data (~/.claude-status)")
+	fmt.Fprintln(out, "  3) Full cleanup (setup + data + local binaries + local IDE extensions)")
+	fmt.Fprint(out, "Enter 1, 2, or 3 [1]: ")
+
+	reader := bufio.NewReader(in)
+	choice, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("cannot read uninstall choice: %w", err)
+	}
+
+	switch strings.TrimSpace(choice) {
+	case "", "1":
+		return UninstallModeSetup, nil
+	case "2":
+		return UninstallModeData, nil
+	case "3":
+		return UninstallModeFull, nil
+	default:
+		return "", fmt.Errorf("invalid choice %q", strings.TrimSpace(choice))
+	}
+}
+
+func isValidUninstallMode(mode UninstallMode) bool {
+	switch mode {
+	case UninstallModeSetup, UninstallModeData, UninstallModeFull:
+		return true
+	default:
+		return false
+	}
+}
+
 func resolvePath(path string) string {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err == nil {
@@ -400,6 +505,51 @@ func preferredShellRC(home string) string {
 		return bashrc
 	}
 	return zshrc
+}
+
+func installedBinaryPaths(home string) []string {
+	paths := []string{
+		filepath.Join(home, ".local", "bin", "claude-status"),
+		filepath.Join(home, "go", "bin", "claude-status"),
+	}
+	if gobin := strings.TrimSpace(os.Getenv("GOBIN")); gobin != "" {
+		paths = append(paths, filepath.Join(gobin, "claude-status"))
+	}
+	return uniqueExistingPaths(paths)
+}
+
+func installedExtensionPaths(home string) []string {
+	patterns := []string{
+		filepath.Join(home, ".cursor", "extensions", "oscarangulo.claude-status-*"),
+		filepath.Join(home, ".vscode", "extensions", "oscarangulo.claude-status-*"),
+		filepath.Join(home, ".cursor-insiders", "extensions", "oscarangulo.claude-status-*"),
+		filepath.Join(home, ".vscode-insiders", "extensions", "oscarangulo.claude-status-*"),
+	}
+	var paths []string
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		paths = append(paths, matches...)
+	}
+	return uniqueExistingPaths(paths)
+}
+
+func uniqueExistingPaths(paths []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		resolved := resolvePath(path)
+		if seen[resolved] {
+			continue
+		}
+		if _, err := os.Stat(path); err == nil {
+			seen[resolved] = true
+			result = append(result, path)
+		}
+	}
+	return result
 }
 
 type installMethod string

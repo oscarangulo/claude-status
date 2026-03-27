@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -111,5 +112,42 @@ func TestDetectInstallMethod(t *testing.T) {
 				t.Fatalf("expected target %q, got %q", tt.target, target)
 			}
 		})
+	}
+}
+
+func TestPromptUninstallMode(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want UninstallMode
+	}{
+		{name: "default", in: "\n", want: UninstallModeSetup},
+		{name: "setup", in: "1\n", want: UninstallModeSetup},
+		{name: "data", in: "2\n", want: UninstallModeData},
+		{name: "full", in: "3\n", want: UninstallModeFull},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			got, err := promptUninstallMode(bytes.NewBufferString(tt.in), &out)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, got)
+			}
+			if out.Len() == 0 {
+				t.Fatal("expected uninstall prompt output")
+			}
+		})
+	}
+}
+
+func TestPromptUninstallModeInvalidChoice(t *testing.T) {
+	var out bytes.Buffer
+	_, err := promptUninstallMode(bytes.NewBufferString("4\n"), &out)
+	if err == nil {
+		t.Fatal("expected invalid choice error")
 	}
 }

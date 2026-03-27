@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.8 (2026-03-27)
+
+- Make CLI uninstall interactive so users can choose setup-only, data cleanup, or full local removal in one command
+- Add non-interactive uninstall modes for scripts with `--mode` and `--yes`
+- Update the VS Code extension uninstall flow to offer setup-only or setup-plus-data cleanup directly in the IDE
+- Remove a duplicate runtime id assignment from the extension status hook template
+
 ## 0.4.7 (2026-03-27)
 
 - Align the VS Code extension version with the latest Git and Homebrew release line

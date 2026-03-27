@@ -13,7 +13,6 @@ INPUT=$(cat)
 DATA_DIR="\${CLAUDE_STATUS_DIR:-$HOME/.claude-status}"
 SESSION_DIR="$DATA_DIR/sessions"
 RUN_ID=$(date -u +"%Y%m%dT%H%M%SZ")
-RUN_ID=$(date -u +"%Y%m%dT%H%M%SZ")
 
 eval "$(echo "$INPUT" | jq -r '
   @sh "SESSION_ID=\\(.session_id // "unknown")",
@@ -272,8 +271,9 @@ export async function installHooks(): Promise<boolean> {
   }
 }
 
-export async function uninstallHooks(): Promise<boolean> {
+export async function uninstallHooks(mode: 'setup' | 'data' = 'setup'): Promise<boolean> {
   const home = os.homedir();
+  const dataDir = path.join(home, '.claude-status');
   const hooksDir = path.join(home, '.claude-status', 'hooks');
   const settingsPath = path.join(home, '.claude', 'settings.json');
 
@@ -306,6 +306,14 @@ export async function uninstallHooks(): Promise<boolean> {
     for (const name of ['status-line.sh', 'task-hook.sh']) {
       const p = path.join(hooksDir, name);
       if (fs.existsSync(p)) { fs.unlinkSync(p); }
+    }
+
+    if (fs.existsSync(hooksDir)) {
+      fs.rmSync(hooksDir, { recursive: true, force: true });
+    }
+
+    if (mode === 'data' && fs.existsSync(dataDir)) {
+      fs.rmSync(dataDir, { recursive: true, force: true });
     }
 
     return true;
