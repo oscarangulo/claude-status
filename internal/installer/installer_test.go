@@ -66,6 +66,7 @@ func TestEnsureShellPathEntry(t *testing.T) {
 func TestDetectInstallMethod(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("GOBIN", filepath.Join(home, "gobin"))
 
 	tests := []struct {
