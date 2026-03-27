@@ -13,6 +13,7 @@ import (
 
 type Watcher struct {
 	sessionDir string
+	activeFile string
 	snapCh     chan model.Snapshot
 	taskCh     chan model.TaskEvent
 	offsets    map[string]int64
@@ -28,7 +29,7 @@ func New(sessionDir string) *Watcher {
 	}
 }
 
-func (w *Watcher) Snapshots() <-chan model.Snapshot  { return w.snapCh }
+func (w *Watcher) Snapshots() <-chan model.Snapshot   { return w.snapCh }
 func (w *Watcher) TaskEvents() <-chan model.TaskEvent { return w.taskCh }
 
 // Start watches the sessions directory for new/modified JSONL files.
@@ -95,15 +96,19 @@ func (w *Watcher) Start(ctx context.Context) error {
 }
 
 func (w *Watcher) processFile(path string) {
+	w.mu.Lock()
+	if w.activeFile != "" && path != w.activeFile {
+		w.mu.Unlock()
+		return
+	}
+	offset := w.offsets[path]
+	w.mu.Unlock()
+
 	f, err := os.Open(path)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-
-	w.mu.Lock()
-	offset := w.offsets[path]
-	w.mu.Unlock()
 
 	snaps, events, newOffset, err := model.ParseNewLines(f, offset)
 	if err != nil {
@@ -132,5 +137,12 @@ func (w *Watcher) processFile(path string) {
 func (w *Watcher) SetOffset(path string, offset int64) {
 	w.mu.Lock()
 	w.offsets[path] = offset
+	w.mu.Unlock()
+}
+
+// SetActiveFile restricts watcher updates to a single active session file.
+func (w *Watcher) SetActiveFile(path string) {
+	w.mu.Lock()
+	w.activeFile = path
 	w.mu.Unlock()
 }

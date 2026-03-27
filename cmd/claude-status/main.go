@@ -90,6 +90,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	}
 
 	if activeFile != "" {
+		w.SetActiveFile(activeFile)
 		session, err := model.ParseSessionFile(activeFile)
 		if err == nil && session != nil {
 			a.LoadSession(session)

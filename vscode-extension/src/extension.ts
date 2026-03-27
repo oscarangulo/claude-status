@@ -253,11 +253,12 @@ function showDetailsPanel() {
   // Completed tasks
   const completedTasks = new Map<string, { subject: string; startCost: number; endCost: number }>();
   for (const t of session.tasks) {
+    const taskKey = t.task_id || t.task_subject;
     if (t.event === 'task_started') {
-      completedTasks.set(t.task_subject, { subject: t.task_subject, startCost: t.cost_snapshot_usd, endCost: 0 });
+      completedTasks.set(taskKey, { subject: t.task_subject, startCost: t.cost_snapshot_usd, endCost: 0 });
     }
     if (t.event === 'task_completed') {
-      const existing = completedTasks.get(t.task_subject);
+      const existing = completedTasks.get(taskKey);
       if (existing) { existing.endCost = t.cost_snapshot_usd; }
     }
   }

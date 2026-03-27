@@ -47,10 +47,39 @@ mkdir -p "$SESSION_DIR"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 LOG_FILE="$SESSION_DIR/${SESSION_ID}.jsonl"
 
-printf '{"type":"snapshot","timestamp":"%s","session_id":"%s","total_cost_usd":%s,"total_input_tokens":%s,"total_output_tokens":%s,"cache_read_tokens":%s,"cache_write_tokens":%s,"context_used_pct":%s,"context_window_size":%s,"total_duration_ms":%s,"total_api_duration_ms":%s,"total_lines_added":%s,"total_lines_removed":%s,"model":"%s"}\n' \
-  "$TIMESTAMP" "$SESSION_ID" "$TOTAL_COST" "$TOTAL_INPUT" "$TOTAL_OUTPUT" \
-  "$CACHE_READ" "$CACHE_WRITE" "$CTX_PCT" "$CTX_SIZE" "$TOTAL_DURATION" \
-  "$API_DURATION" "$LINES_ADDED" "$LINES_REMOVED" "$MODEL" >> "$LOG_FILE"
+jq -cn \
+  --arg type "snapshot" \
+  --arg timestamp "$TIMESTAMP" \
+  --arg session_id "$SESSION_ID" \
+  --arg model "$MODEL" \
+  --argjson total_cost_usd "$TOTAL_COST" \
+  --argjson total_input_tokens "$TOTAL_INPUT" \
+  --argjson total_output_tokens "$TOTAL_OUTPUT" \
+  --argjson cache_read_tokens "$CACHE_READ" \
+  --argjson cache_write_tokens "$CACHE_WRITE" \
+  --argjson context_used_pct "$CTX_PCT" \
+  --argjson context_window_size "$CTX_SIZE" \
+  --argjson total_duration_ms "$TOTAL_DURATION" \
+  --argjson total_api_duration_ms "$API_DURATION" \
+  --argjson total_lines_added "$LINES_ADDED" \
+  --argjson total_lines_removed "$LINES_REMOVED" \
+  '{
+    type: $type,
+    timestamp: $timestamp,
+    session_id: $session_id,
+    total_cost_usd: $total_cost_usd,
+    total_input_tokens: $total_input_tokens,
+    total_output_tokens: $total_output_tokens,
+    cache_read_tokens: $cache_read_tokens,
+    cache_write_tokens: $cache_write_tokens,
+    context_used_pct: $context_used_pct,
+    context_window_size: $context_window_size,
+    total_duration_ms: $total_duration_ms,
+    total_api_duration_ms: $total_api_duration_ms,
+    total_lines_added: $total_lines_added,
+    total_lines_removed: $total_lines_removed,
+    model: $model
+  }' >> "$LOG_FILE"
 
 # --- Format tokens ---
 format_tok() {

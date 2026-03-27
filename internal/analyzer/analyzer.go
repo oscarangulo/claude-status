@@ -45,7 +45,7 @@ func (a *Analyzer) TaskCosts() []model.TaskCost {
 		return nil
 	}
 
-	// Group events by task subject (more reliable than task_id from md5)
+	// Group events by task instance id so repeated task subjects remain distinct.
 	type taskInfo struct {
 		subject   string
 		taskID    string
@@ -63,7 +63,10 @@ func (a *Analyzer) TaskCosts() []model.TaskCost {
 	var order []string
 
 	for _, evt := range a.session.TaskEvents {
-		key := evt.TaskSubject
+		key := evt.TaskID
+		if key == "" {
+			key = evt.TaskSubject
+		}
 		t, exists := tasks[key]
 		if !exists {
 			t = &taskInfo{
@@ -184,7 +187,11 @@ func (a *Analyzer) Summary() model.SessionSummary {
 	completed := make(map[string]bool)
 	for _, evt := range a.session.TaskEvents {
 		if evt.Event == "task_completed" {
-			completed[evt.TaskSubject] = true
+			key := evt.TaskID
+			if key == "" {
+				key = evt.TaskSubject
+			}
+			completed[key] = true
 		}
 	}
 	s.TaskCount = len(completed)

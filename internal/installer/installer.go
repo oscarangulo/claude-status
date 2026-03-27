@@ -101,21 +101,7 @@ func Install() error {
 	}
 	postToolJSON, _ := json.Marshal(postToolHook)
 
-	// TaskCompleted hook
-	taskCompletedHook := hookEntry{
-		Hooks: []hookAction{{Type: "command", Command: taskHookCmd}},
-	}
-	taskCompletedJSON, _ := json.Marshal(taskCompletedHook)
-
-	// SessionEnd hook
-	sessionEndHook := hookEntry{
-		Hooks: []hookAction{{Type: "command", Command: taskHookCmd}},
-	}
-	sessionEndJSON, _ := json.Marshal(sessionEndHook)
-
 	existingHooks["PostToolUse"] = appendIfNotPresent(existingHooks["PostToolUse"], postToolJSON, taskHookCmd)
-	existingHooks["TaskCompleted"] = appendIfNotPresent(existingHooks["TaskCompleted"], taskCompletedJSON, taskHookCmd)
-	existingHooks["SessionEnd"] = appendIfNotPresent(existingHooks["SessionEnd"], sessionEndJSON, taskHookCmd)
 
 	hooksJSON, _ := json.Marshal(existingHooks)
 	settings["hooks"] = json.RawMessage(hooksJSON)

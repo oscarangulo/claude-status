@@ -98,16 +98,25 @@ export function parseSessionFile(filePath: string): SessionData {
 
   // Find current running task
   let currentTask: SessionData['currentTask'] = null;
-  const startedTasks = tasks.filter(t => t.event === 'task_started');
-  if (startedTasks.length > 0 && latest) {
-    const lastStarted = startedTasks[startedTasks.length - 1];
-    const isCompleted = tasks.some(
-      t => t.task_id === lastStarted.task_id && t.event === 'task_completed'
-    );
-    if (!isCompleted) {
+  if (latest) {
+    const latestByTask = new Map<string, TaskEvent>();
+    for (const task of tasks) {
+      latestByTask.set(task.task_id || task.task_subject, task);
+    }
+
+    let runningTask: TaskEvent | null = null;
+    for (const task of latestByTask.values()) {
+      if (task.task_status === 'in_progress' || task.event === 'task_started') {
+        if (!runningTask || new Date(task.timestamp).getTime() > new Date(runningTask.timestamp).getTime()) {
+          runningTask = task;
+        }
+      }
+    }
+
+    if (runningTask) {
       currentTask = {
-        subject: lastStarted.task_subject,
-        costDelta: latest.total_cost_usd - lastStarted.cost_snapshot_usd,
+        subject: runningTask.task_subject,
+        costDelta: Math.max(0, latest.total_cost_usd - runningTask.cost_snapshot_usd),
       };
     }
   }
@@ -120,7 +129,7 @@ export function computeMetrics(session: SessionData) {
   if (!s) { return null; }
 
   const totalTokens = s.total_input_tokens + s.total_output_tokens;
-  const totalIn = (s.total_input_tokens - s.cache_read_tokens) + s.cache_read_tokens;
+  const totalIn = s.total_input_tokens + s.cache_read_tokens;
   const cacheHitRate = totalIn > 0 ? (s.cache_read_tokens / totalIn) * 100 : 0;
 
   const pricing = getModelPricing(s.model);

@@ -50,6 +50,34 @@ func TestTaskCosts(t *testing.T) {
 	}
 }
 
+func TestTaskCosts_UsesTaskIDForRepeatedSubjects(t *testing.T) {
+	a := New()
+
+	t0 := time.Date(2026, 3, 26, 15, 0, 0, 0, time.UTC)
+	t1 := time.Date(2026, 3, 26, 15, 1, 0, 0, time.UTC)
+	t2 := time.Date(2026, 3, 26, 15, 2, 0, 0, time.UTC)
+	t3 := time.Date(2026, 3, 26, 15, 3, 0, 0, time.UTC)
+
+	a.AddSnapshot(model.Snapshot{Timestamp: t0, SessionID: "s1", TotalCostUSD: 0.01, TotalInputTok: 1000, TotalOutputTok: 500})
+	a.AddTaskEvent(model.TaskEvent{Timestamp: t0, SessionID: "s1", Event: "task_started", TaskID: "task-a-1", TaskSubject: "Write tests", CostSnap: 0.01, TokenSnap: 1500})
+	a.AddSnapshot(model.Snapshot{Timestamp: t1, SessionID: "s1", TotalCostUSD: 0.03, TotalInputTok: 3000, TotalOutputTok: 1000})
+	a.AddTaskEvent(model.TaskEvent{Timestamp: t1, SessionID: "s1", Event: "task_completed", TaskID: "task-a-1", TaskSubject: "Write tests", CostSnap: 0.03, TokenSnap: 4000})
+	a.AddTaskEvent(model.TaskEvent{Timestamp: t2, SessionID: "s1", Event: "task_started", TaskID: "task-a-2", TaskSubject: "Write tests", CostSnap: 0.03, TokenSnap: 4000})
+	a.AddSnapshot(model.Snapshot{Timestamp: t3, SessionID: "s1", TotalCostUSD: 0.08, TotalInputTok: 8000, TotalOutputTok: 2000})
+	a.AddTaskEvent(model.TaskEvent{Timestamp: t3, SessionID: "s1", Event: "task_completed", TaskID: "task-a-2", TaskSubject: "Write tests", CostSnap: 0.08, TokenSnap: 10000})
+
+	costs := a.TaskCosts()
+	if len(costs) != 2 {
+		t.Fatalf("expected 2 distinct tasks, got %d", len(costs))
+	}
+	if !approx(costs[0].DeltaCost, 0.02) {
+		t.Fatalf("expected first delta ~0.02, got %f", costs[0].DeltaCost)
+	}
+	if !approx(costs[1].DeltaCost, 0.05) {
+		t.Fatalf("expected second delta ~0.05, got %f", costs[1].DeltaCost)
+	}
+}
+
 func TestSummary(t *testing.T) {
 	a := New()
 

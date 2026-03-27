@@ -21,6 +21,7 @@ type App struct {
 	width    int
 	height   int
 	ready    bool
+	showHelp bool
 }
 
 func NewApp(a *analyzer.Analyzer, w *watcher.Watcher) *App {
@@ -62,6 +63,9 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, tea.Quit
 		case key.Matches(msg, keys.Refresh):
 			return app, nil
+		case key.Matches(msg, keys.Help):
+			app.showHelp = !app.showHelp
+			return app, nil
 		}
 
 	case snapshotMsg:
@@ -79,6 +83,9 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (app *App) View() string {
 	if !app.ready {
 		return "Starting claude-status...\n"
+	}
+	if app.showHelp {
+		return renderHelp()
 	}
 	return renderDashboard(app.analyzer, app.width)
 }
@@ -103,4 +110,8 @@ func waitForTaskEvent(w *watcher.Watcher) tea.Cmd {
 		}
 		return taskEventMsg(evt)
 	}
+}
+
+func renderHelp() string {
+	return "Claude Status Help\n\nq: quit\nr: refresh\n?: toggle help\n"
 }
