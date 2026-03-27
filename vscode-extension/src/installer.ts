@@ -13,6 +13,7 @@ INPUT=$(cat)
 DATA_DIR="\${CLAUDE_STATUS_DIR:-$HOME/.claude-status}"
 SESSION_DIR="$DATA_DIR/sessions"
 RUN_ID=$(date -u +"%Y%m%dT%H%M%SZ")
+RUN_ID=$(date -u +"%Y%m%dT%H%M%SZ")
 
 eval "$(echo "$INPUT" | jq -r '
   @sh "SESSION_ID=\\(.session_id // "unknown")",

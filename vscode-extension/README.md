@@ -55,20 +55,22 @@ Click the status bar to see everything in a scrollable panel:
 ## Requirements
 
 1. **Claude Code** installed and running
-2. **claude-status hooks** configured — install via CLI:
+2. **claude-status hooks** configured:
 
 ```bash
-# Install the CLI tool (any method)
-go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
-# Or: brew tap oscarangulo/claude-status && brew install claude-status
+# Recommended: use the command palette
+Claude Status: Set Up Claude Code
+```
 
-# Configure hooks in Claude Code
+Or, if you already have the CLI:
+
+```bash
 claude-status install
 ```
 
-3. Restart Claude Code after installing hooks
+3. Restart Claude Code after installing hooks if it was already open
 
-> The hooks capture token/cost data from Claude Code sessions. This extension reads that data and displays it in your IDE. No additional configuration needed.
+> The hooks capture token/cost data from Claude Code sessions. This extension writes those hooks for you automatically, then reads the resulting data and displays it in your IDE.
 
 ## How it works
 

@@ -49,7 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 async function autoInstall() {
   const answer = await vscode.window.showInformationMessage(
-    'Claude Status Monitor needs to configure hooks in Claude Code to track costs. Set up now?',
+    'Claude Status Monitor can configure Claude Code automatically. Set up hooks now? No CLI steps required.',
     'Yes, set up automatically',
     'Not now',
   );
@@ -62,7 +62,7 @@ async function runInstall() {
   const success = await installHooks();
   if (success) {
     vscode.window.showInformationMessage(
-      'Claude Status Monitor is ready! Cost data will appear after Claude\'s next response.'
+      'Claude Status Monitor is ready. Restart Claude Code if it was already open, then cost data will appear after the next response.'
     );
     startWatching();
     updateStatusBar();
@@ -105,7 +105,7 @@ function updateStatusBar() {
   if (!isInstalled()) {
     statusBarItem.text = '$(pulse) Claude Status: click to set up';
     statusBarItem.command = 'claude-status.install';
-    statusBarItem.tooltip = 'Click to configure Claude Code hooks automatically';
+    statusBarItem.tooltip = 'Click to configure Claude Code hooks automatically. No CLI install required.';
     statusBarItem.show();
     detailBarItem.hide();
     return;
@@ -116,7 +116,7 @@ function updateStatusBar() {
   const file = getActiveSessionFile();
   if (!file) {
     statusBarItem.text = '$(pulse) Claude: ready — waiting for session';
-    statusBarItem.tooltip = 'Hooks are configured. Data will appear after Claude\'s next response.';
+    statusBarItem.tooltip = 'Hooks are configured. If data never appears, restart Claude Code and send one more response.';
     statusBarItem.show();
     detailBarItem.hide();
     return;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 (2026-03-27)
+
+- Make the CLI installer place `claude-status` on `PATH` when users install from a local binary, source checkout, or `go run`
+- Clarify in the VS Code extension that Claude Code hooks can be configured automatically without separate CLI steps
+- Fix the extension task hook template so task-instance ids are generated reliably during setup
+- Improve onboarding copy when Claude Code needs a restart after setup
+- Rename VS Code commands to reflect full Claude Code setup instead of only hook installation
+
 ## 0.4.1 (2026-03-27)
 
 - Fix task tracking so repeated task names no longer merge into the same cost bucket

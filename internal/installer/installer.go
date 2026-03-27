@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,12 @@ func Install() error {
 	if err != nil {
 		return fmt.Errorf("cannot find home directory: %w", err)
 	}
+
+	binaryPath, err := ensureBinaryAvailable(home)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("  Binary ready at %s\n", binaryPath)
 
 	dataDir := filepath.Join(home, ".claude-status")
 	hooksDir := filepath.Join(dataDir, "hooks")
@@ -257,4 +264,137 @@ func containsCommandFragment(raw json.RawMessage, fragment string) bool {
 		}
 	}
 	return false
+}
+
+func ensureBinaryAvailable(home string) (string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("cannot locate current executable: %w", err)
+	}
+
+	exePath = resolvePath(exePath)
+	exeDir := filepath.Dir(exePath)
+	if dirInPath(exeDir) {
+		return exePath, nil
+	}
+
+	installDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		return "", fmt.Errorf("cannot create %s: %w", installDir, err)
+	}
+
+	dest := filepath.Join(installDir, "claude-status")
+	if exePath != dest {
+		if err := copyExecutable(exePath, dest); err != nil {
+			return "", fmt.Errorf("cannot install binary to %s: %w", dest, err)
+		}
+	}
+
+	if err := ensureShellPathEntry(home, installDir); err != nil {
+		return "", err
+	}
+
+	return dest, nil
+}
+
+func resolvePath(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved
+	}
+	return path
+}
+
+func dirInPath(target string) bool {
+	target = resolvePath(target)
+	for _, part := range filepath.SplitList(os.Getenv("PATH")) {
+		if part == "" {
+			continue
+		}
+		if resolvePath(part) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureShellPathEntry(home, installDir string) error {
+	shellRC := preferredShellRC(home)
+	content, err := os.ReadFile(shellRC)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("cannot read %s: %w", shellRC, err)
+	}
+
+	pathExport := fmt.Sprintf(`export PATH="$HOME/.local/bin:$PATH"`)
+	if strings.Contains(string(content), installDir) || strings.Contains(string(content), pathExport) {
+		return nil
+	}
+
+	f, err := os.OpenFile(shellRC, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("cannot update %s: %w", shellRC, err)
+	}
+	defer f.Close()
+
+	if len(content) > 0 && !strings.HasSuffix(string(content), "\n") {
+		if _, err := f.WriteString("\n"); err != nil {
+			return fmt.Errorf("cannot update %s: %w", shellRC, err)
+		}
+	}
+
+	if _, err := f.WriteString(pathExport + "\n"); err != nil {
+		return fmt.Errorf("cannot update %s: %w", shellRC, err)
+	}
+
+	fmt.Printf("  Added %s to PATH in %s\n", installDir, shellRC)
+	return nil
+}
+
+func preferredShellRC(home string) string {
+	zshrc := filepath.Join(home, ".zshrc")
+	if _, err := os.Stat(zshrc); err == nil {
+		return zshrc
+	}
+
+	bashrc := filepath.Join(home, ".bashrc")
+	if _, err := os.Stat(bashrc); err == nil {
+		return bashrc
+	}
+
+	if strings.Contains(os.Getenv("SHELL"), "bash") {
+		return bashrc
+	}
+	return zshrc
+}
+
+func copyExecutable(src, dest string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
+	if err != nil {
+		return err
+	}
+
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+
+	if info.Mode()&0111 != 0 {
+		return os.Chmod(dest, 0755)
+	}
+	return os.Chmod(dest, 0644)
 }

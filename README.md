@@ -168,16 +168,15 @@ claude-status install
 
 ### Option 2: From source
 
-Clone, build, and install to your PATH in one step:
+Clone and run the installer. It will make `claude-status` available from your PATH if needed, then configure Claude Code:
 
 ```bash
 git clone https://github.com/oscarangulo/claude-status.git
 cd claude-status
-make install            # builds + copies to ~/.local/bin + adds to PATH
-claude-status install   # configures Claude Code hooks
+go run ./cmd/claude-status install
 ```
 
-> `make install` places the binary in `~/.local/bin` and automatically adds it to your PATH (updates `.zshrc` or `.bashrc` if needed). Open a new terminal or run `source ~/.zshrc` for the PATH change to take effect.
+> If you prefer an explicit build step, `make install && claude-status install` still works.
 
 ### Option 3: Download binary
 
@@ -195,16 +194,17 @@ Download pre-built binaries from [Releases](https://github.com/oscarangulo/claud
 # Example: macOS Apple Silicon
 curl -L https://github.com/oscarangulo/claude-status/releases/latest/download/claude-status-darwin-arm64 -o claude-status
 chmod +x claude-status
-# Move to a directory in your PATH:
-mv claude-status ~/.local/bin/   # or /usr/local/bin/ with sudo
-claude-status install
+./claude-status install
 ```
+
+> When needed, `install` copies the current binary into `~/.local/bin` and adds that directory to your PATH automatically.
 
 ### What `install` does
 
-1. Copies hook scripts to `~/.claude-status/hooks/`
-2. Configures `~/.claude/settings.json` with status line and hooks
-3. Creates a backup of your existing settings
+1. Ensures the `claude-status` binary is available from your `PATH` when needed
+2. Copies hook scripts to `~/.claude-status/hooks/`
+3. Configures `~/.claude/settings.json` with status line and hooks
+4. Creates a backup of your existing settings
 
 Restart Claude Code after installing.
 
