@@ -8,6 +8,7 @@ import (
 
 func TestPreferredShellRC(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("SHELL", "/bin/zsh")
 
 	if got := preferredShellRC(home); got != filepath.Join(home, ".zshrc") {
 		t.Fatalf("expected default zshrc, got %s", got)
@@ -33,6 +34,7 @@ func TestPreferredShellRC(t *testing.T) {
 func TestEnsureShellPathEntry(t *testing.T) {
 	home := t.TempDir()
 	installDir := filepath.Join(home, ".local", "bin")
+	t.Setenv("SHELL", "/bin/zsh")
 
 	if err := ensureShellPathEntry(home, installDir); err != nil {
 		t.Fatalf("unexpected error: %v", err)
