@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.7 (2026-03-27)
+
+- Align the VS Code extension version with the latest Git and Homebrew release line
+- Publish the extension on the same release train as the installer and self-update improvements
+- No functional extension behavior changes beyond version synchronization
+
 ## 0.4.2 (2026-03-27)
 
 - Make the CLI installer place `claude-status` on `PATH` when users install from a local binary, source checkout, or `go run`
