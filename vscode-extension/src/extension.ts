@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import {
   getSessionsDir,
   getActiveSessionFile,
@@ -12,7 +14,7 @@ import { isInstalled, installHooks, uninstallHooks } from './installer';
 
 let statusBarItem: vscode.StatusBarItem;
 let detailBarItem: vscode.StatusBarItem;
-let watcher: fs.FSWatcher | null = null;
+let watchers: fs.FSWatcher[] = [];
 let refreshInterval: NodeJS.Timeout | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -43,7 +45,8 @@ export function activate(context: vscode.ExtensionContext) {
   refreshInterval = setInterval(updateStatusBar, 5000);
   context.subscriptions.push({ dispose: () => {
     if (refreshInterval) { clearInterval(refreshInterval); }
-    if (watcher) { watcher.close(); }
+    for (const watcher of watchers) { watcher.close(); }
+    watchers = [];
   }});
 }
 
@@ -62,7 +65,7 @@ async function runInstall() {
   const success = await installHooks();
   if (success) {
     vscode.window.showInformationMessage(
-      'Claude Status Monitor is ready. Restart Claude Code if it was already open, then cost data will appear after the next response.'
+      'Claude Status Monitor is ready. Open a new terminal if you want the claude-status command in PATH immediately. Active Claude sessions should now appear automatically.'
     );
     startWatching();
     updateStatusBar();
@@ -95,20 +98,29 @@ async function runUninstall() {
 }
 
 function startWatching() {
-  const dir = getSessionsDir();
-  if (!fs.existsSync(dir)) {
+  const dirs = [
+    getSessionsDir(),
+    path.join(os.homedir(), '.claude', 'projects'),
+  ].filter(dir => fs.existsSync(dir));
+
+  if (dirs.length === 0) {
     setTimeout(startWatching, 10000);
     return;
   }
-  try {
-    if (watcher) { watcher.close(); }
-    watcher = fs.watch(dir, (_eventType, filename) => {
-      if (filename && filename.endsWith('.jsonl')) {
-        updateStatusBar();
-      }
-    });
-  } catch {
-    // Fallback to polling
+
+  for (const watcher of watchers) { watcher.close(); }
+  watchers = [];
+
+  for (const dir of dirs) {
+    try {
+      watchers.push(fs.watch(dir, { recursive: true }, (_eventType, filename) => {
+        if (filename && filename.endsWith('.jsonl')) {
+          updateStatusBar();
+        }
+      }));
+    } catch {
+      // Fallback to polling when recursive watch is unavailable.
+    }
   }
 }
 
@@ -169,8 +181,10 @@ function updateStatusBar() {
   statusBarItem.show();
 
   // --- Status bar line 2: Memory, savings, task ---
-  let detailText = `Memory ${m.contextPct}%`;
-  if (m.contextPct >= 80) { detailText += ' $(alert) almost full!'; }
+  let detailText = m.source === 'native'
+    ? 'Live session detected from Claude Code history'
+    : `Memory ${m.contextPct}%`;
+  if (m.source !== 'native' && m.contextPct >= 80) { detailText += ' $(alert) almost full!'; }
 
   if (m.cacheSavings > 0.001) {
     detailText += ` | Saved $${m.cacheSavings.toFixed(4)} from cache`;
@@ -199,6 +213,9 @@ function buildTooltip(m: ReturnType<typeof computeMetrics>): vscode.MarkdownStri
     md.appendMarkdown(`Spending $${m.burnRate.toFixed(3)} per minute\n\n`);
   }
   md.appendMarkdown(`Reading ${formatTokens(m.inputTokens)} tokens, writing ${formatTokens(m.outputTokens)} tokens\n\n`);
+  if (m.source === 'native') {
+    md.appendMarkdown(`Showing data from Claude Code session history, so task tracking and memory usage may be unavailable.\n\n`);
+  }
   if (m.cacheSavings > 0.001) {
     md.appendMarkdown(`Cache saved you **$${m.cacheSavings.toFixed(4)}** (${m.cacheHitRate.toFixed(0)}% reused)\n\n`);
   }
@@ -238,14 +255,22 @@ function showDetailsPanel() {
       description: `${m.cacheHitRate.toFixed(0)}% of input was reused from cache`,
     },
     {
-      label: `$(browser) Memory used: ${m.contextPct}%`,
-      description: m.contextPct >= 80 ? 'Almost full! Use /compact to free space' : `${100 - m.contextPct}% remaining`,
-    },
-    {
       label: `$(clock) Session time: ${m.duration}`,
       description: `Using ${m.model}`,
     },
   ];
+
+  if (m.source !== 'native') {
+    items.push({
+      label: `$(browser) Memory used: ${m.contextPct}%`,
+      description: m.contextPct >= 80 ? 'Almost full! Use /compact to free space' : `${100 - m.contextPct}% remaining`,
+    });
+  } else {
+    items.push({
+      label: '$(history) Session source: Claude Code history',
+      description: 'Loaded from ~/.claude/projects so active sessions work even before hook snapshots are written.',
+    });
+  }
 
   if (m.linesAdded > 0 || m.linesRemoved > 0) {
     items.push({
@@ -296,6 +321,7 @@ function showDetailsPanel() {
 }
 
 export function deactivate() {
-  if (watcher) { watcher.close(); }
+  for (const watcher of watchers) { watcher.close(); }
+  watchers = [];
   if (refreshInterval) { clearInterval(refreshInterval); }
 }

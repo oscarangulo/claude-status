@@ -70,7 +70,8 @@ claude-status install
 
 3. Restart Claude Code after installing hooks if it was already open
 
-> The hooks capture token/cost data from Claude Code sessions. This extension writes those hooks for you automatically, then reads the resulting data and displays it in your IDE.
+> Installing from Marketplace also installs the `claude-status` CLI into `~/.local/bin` when needed, so a new terminal can run `claude-status` without extra setup.
+> The extension reads both `~/.claude-status/sessions/` and Claude Code's native `~/.claude/projects/**/*.jsonl`, so already-active sessions and new sessions both show up.
 
 ## How it works
 
@@ -81,8 +82,8 @@ Claude Code ──hooks──> ~/.claude-status/sessions/*.jsonl
 ```
 
 1. Claude Code hooks capture token/cost snapshots after every message
-2. Data is stored locally as JSONL files in `~/.claude-status/sessions/`
-3. This extension watches those files and updates the status bar in real-time
+2. Data is stored locally in `~/.claude-status/sessions/`, with fallback reads from `~/.claude/projects/**/*.jsonl`
+3. This extension watches both data sources and updates the status bar in real-time
 4. Nothing is sent anywhere — all data stays on your machine
 
 ## Commands

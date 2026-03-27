@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.9 (2026-03-27)
+
+- Fix the VS Code extension so active Claude Code sessions show usage immediately even when `~/.claude-status/sessions` snapshots are empty
+- Fall back to Claude Code's native `~/.claude/projects/**/*.jsonl` session history so existing and newly started sessions appear in the status bar
+- Watch both managed snapshot files and native Claude Code project sessions for faster refreshes
+- Make Marketplace setup install the `claude-status` CLI into `~/.local/bin` and add that directory to shell `PATH` when needed
+
 ## 0.4.8 (2026-03-27)
 
 - Make CLI uninstall interactive so users can choose setup-only, data cleanup, or full local removal in one command

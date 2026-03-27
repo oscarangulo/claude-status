@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as https from 'https';
+import { spawnSync } from 'child_process';
 import * as vscode from 'vscode';
 
 const STATUS_LINE_SCRIPT = `#!/bin/bash
@@ -194,6 +196,126 @@ esac
 echo "{}"
 `;
 
+function resolvePath(target: string): string {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return target;
+  }
+}
+
+function dirInPath(target: string): boolean {
+  const resolvedTarget = resolvePath(target);
+  return (process.env.PATH || '')
+    .split(path.delimiter)
+    .filter(Boolean)
+    .some(part => resolvePath(part) === resolvedTarget);
+}
+
+function preferredShellRc(home: string): string {
+  const zshrc = path.join(home, '.zshrc');
+  if (fs.existsSync(zshrc)) { return zshrc; }
+  const bashrc = path.join(home, '.bashrc');
+  if (fs.existsSync(bashrc)) { return bashrc; }
+  return (process.env.SHELL || '').includes('bash') ? bashrc : zshrc;
+}
+
+function ensureShellPathEntry(home: string, installDir: string): void {
+  const shellRc = preferredShellRc(home);
+  const exportLine = 'export PATH="$HOME/.local/bin:$PATH"';
+  const content = fs.existsSync(shellRc) ? fs.readFileSync(shellRc, 'utf-8') : '';
+  if (content.includes(installDir) || content.includes(exportLine)) {
+    return;
+  }
+
+  const prefix = content.length > 0 && !content.endsWith('\n') ? '\n' : '';
+  fs.appendFileSync(shellRc, `${prefix}${exportLine}\n`);
+}
+
+function getExtensionVersion(): string {
+  const ext = vscode.extensions.getExtension('OscarAngulo.claude-status');
+  return ext?.packageJSON.version || '0.4.8';
+}
+
+function getReleaseAssetName(): string | null {
+  switch (process.platform) {
+    case 'darwin':
+      return process.arch === 'arm64' ? 'claude-status-darwin-arm64' : 'claude-status-darwin-amd64';
+    case 'linux':
+      return process.arch === 'arm64' ? 'claude-status-linux-arm64' : 'claude-status-linux-amd64';
+    case 'win32':
+      return process.arch === 'x64' ? 'claude-status-windows-amd64.exe' : null;
+    default:
+      return null;
+  }
+}
+
+function downloadFile(url: string, destination: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, response => {
+      if (
+        response.statusCode &&
+        response.statusCode >= 300 &&
+        response.statusCode < 400 &&
+        response.headers.location
+      ) {
+        response.resume();
+        downloadFile(response.headers.location, destination).then(resolve, reject);
+        return;
+      }
+
+      if (response.statusCode !== 200) {
+        reject(new Error(`download failed with status ${response.statusCode}`));
+        response.resume();
+        return;
+      }
+
+      const file = fs.createWriteStream(destination, { mode: 0o755 });
+      response.pipe(file);
+      file.on('finish', () => file.close(() => resolve()));
+      file.on('error', err => reject(err));
+    });
+    request.on('error', reject);
+  });
+}
+
+async function ensureCliBinary(home: string): Promise<{ path: string; pathUpdated: boolean }> {
+  const installDir = path.join(home, '.local', 'bin');
+  const binaryPath = path.join(installDir, process.platform === 'win32' ? 'claude-status.exe' : 'claude-status');
+  const expectedVersion = getExtensionVersion();
+  const existing = spawnSync(binaryPath, ['--version'], { encoding: 'utf-8' });
+  if (
+    existing.status === 0 &&
+    `${existing.stdout} ${existing.stderr}`.includes(expectedVersion)
+  ) {
+    const alreadyInPath = dirInPath(installDir);
+    if (!alreadyInPath) {
+      ensureShellPathEntry(home, installDir);
+    }
+    return { path: binaryPath, pathUpdated: !alreadyInPath };
+  }
+
+  const assetName = getReleaseAssetName();
+  if (!assetName) {
+    throw new Error(`unsupported platform ${process.platform}/${process.arch}`);
+  }
+
+  fs.mkdirSync(installDir, { recursive: true });
+  const tmpPath = `${binaryPath}.tmp`;
+  const version = getExtensionVersion();
+  const url = `https://github.com/oscarangulo/claude-status/releases/download/v${version}/${assetName}`;
+  await downloadFile(url, tmpPath);
+  fs.chmodSync(tmpPath, 0o755);
+  fs.renameSync(tmpPath, binaryPath);
+
+  const alreadyInPath = dirInPath(installDir);
+  if (!alreadyInPath) {
+    ensureShellPathEntry(home, installDir);
+  }
+
+  return { path: binaryPath, pathUpdated: !alreadyInPath };
+}
+
 export function isInstalled(): boolean {
   const home = os.homedir();
   const settingsPath = path.join(home, '.claude', 'settings.json');
@@ -215,6 +337,8 @@ export async function installHooks(): Promise<boolean> {
   const settingsPath = path.join(claudeDir, 'settings.json');
 
   try {
+    const cliInstall = await ensureCliBinary(home);
+
     // Create directories
     fs.mkdirSync(hooksDir, { recursive: true });
     fs.mkdirSync(sessionsDir, { recursive: true });
@@ -263,6 +387,13 @@ export async function installHooks(): Promise<boolean> {
     addHook('PostToolUse', 'TodoWrite');
     // Write settings
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    const pathMessage = cliInstall.pathUpdated
+      ? ' Open a new terminal to pick up the PATH change.'
+      : '';
+    vscode.window.showInformationMessage(
+      `Claude Status is ready. The CLI is available at ${cliInstall.path}.${pathMessage}`
+    );
 
     return true;
   } catch (err) {
