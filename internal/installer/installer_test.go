@@ -60,3 +60,53 @@ func TestEnsureShellPathEntry(t *testing.T) {
 		t.Fatalf("expected no duplicate PATH entry, got %q", string(content))
 	}
 }
+
+func TestDetectInstallMethod(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GOBIN", filepath.Join(home, "gobin"))
+
+	tests := []struct {
+		name   string
+		path   string
+		method installMethod
+		target string
+	}{
+		{
+			name:   "brew path",
+			path:   "/opt/homebrew/bin/claude-status",
+			method: installMethodBrew,
+			target: "/opt/homebrew/bin/claude-status",
+		},
+		{
+			name:   "go bin path",
+			path:   filepath.Join(home, "gobin", "claude-status"),
+			method: installMethodGo,
+			target: filepath.Join(home, "gobin", "claude-status"),
+		},
+		{
+			name:   "local path",
+			path:   filepath.Join(home, ".local", "bin", "claude-status"),
+			method: installMethodLocal,
+			target: filepath.Join(home, ".local", "bin", "claude-status"),
+		},
+		{
+			name:   "unknown path",
+			path:   "/tmp/custom/claude-status",
+			method: installMethodUnknown,
+			target: "/tmp/custom/claude-status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			method, target := detectInstallMethod(tt.path)
+			if method != tt.method {
+				t.Fatalf("expected method %q, got %q", tt.method, method)
+			}
+			if target != tt.target {
+				t.Fatalf("expected target %q, got %q", tt.target, target)
+			}
+		})
+	}
+}

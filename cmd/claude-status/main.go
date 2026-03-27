@@ -53,14 +53,16 @@ func main() {
 
 	updateCmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update hook scripts to the latest version",
-		Long:  "Re-installs hook scripts from the current binary. Run this after upgrading claude-status to get the latest status line features.",
+		Short: "Update claude-status and refresh hooks",
+		Long:  "Attempts to upgrade the installed claude-status binary using the detected install method, then refreshes Claude Code hooks and settings.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("claude-status %s\n\n", version)
-			fmt.Println("Updating hook scripts...")
-			return installer.Install()
+			refreshOnly, _ := cmd.Flags().GetBool("refresh-only")
+			return installer.Update(refreshOnly)
 		},
 	}
+	updateCmd.Flags().Bool("refresh-only", false, "refresh hooks without attempting to self-update the binary")
+	_ = updateCmd.Flags().MarkHidden("refresh-only")
 
 	historyCmd := &cobra.Command{
 		Use:   "history",

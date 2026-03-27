@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 // HookFiles must be set by the main package which embeds the hooks directory.
 var HookFiles embed.FS
+
+const moduleInstallTarget = "github.com/oscarangulo/claude-status/cmd/claude-status@latest"
 
 // Claude Code hook format:
 // {"matcher": "ToolName", "hooks": [{"type": "command", "command": "bash /path/to/script.sh"}]}
@@ -124,6 +127,31 @@ func Install() error {
 
 	fmt.Println("\nInstallation complete! Restart Claude Code to activate.")
 	return nil
+}
+
+func Update(refreshOnly bool) error {
+	if refreshOnly {
+		fmt.Println("Updating hook scripts...")
+		return Install()
+	}
+
+	currentPath, err := currentExecutablePath()
+	if err != nil {
+		return err
+	}
+
+	method, targetPath := detectInstallMethod(currentPath)
+	if err := selfUpdate(method, targetPath); err != nil {
+		return err
+	}
+
+	updatedPath, err := resolveUpdatedBinaryPath(method, currentPath, targetPath)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Running refreshed binary at %s\n\n", updatedPath)
+	return runBinary(updatedPath, "update", "--refresh-only")
 }
 
 func Uninstall() error {
@@ -267,12 +295,11 @@ func containsCommandFragment(raw json.RawMessage, fragment string) bool {
 }
 
 func ensureBinaryAvailable(home string) (string, error) {
-	exePath, err := os.Executable()
+	exePath, err := currentExecutablePath()
 	if err != nil {
-		return "", fmt.Errorf("cannot locate current executable: %w", err)
+		return "", err
 	}
 
-	exePath = resolvePath(exePath)
 	exeDir := filepath.Dir(exePath)
 	if dirInPath(exeDir) {
 		return exePath, nil
@@ -303,6 +330,14 @@ func resolvePath(path string) string {
 		return resolved
 	}
 	return path
+}
+
+func currentExecutablePath() (string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("cannot locate current executable: %w", err)
+	}
+	return resolvePath(exePath), nil
 }
 
 func dirInPath(target string) bool {
@@ -365,6 +400,141 @@ func preferredShellRC(home string) string {
 		return bashrc
 	}
 	return zshrc
+}
+
+type installMethod string
+
+const (
+	installMethodBrew    installMethod = "brew"
+	installMethodGo      installMethod = "go"
+	installMethodLocal   installMethod = "local"
+	installMethodUnknown installMethod = "unknown"
+)
+
+func detectInstallMethod(currentPath string) (installMethod, string) {
+	home, _ := os.UserHomeDir()
+	currentPath = resolvePath(currentPath)
+
+	if strings.Contains(currentPath, "/Cellar/") ||
+		currentPath == "/opt/homebrew/bin/claude-status" ||
+		currentPath == "/usr/local/bin/claude-status" {
+		return installMethodBrew, currentPath
+	}
+
+	if gopath := strings.TrimSpace(os.Getenv("GOBIN")); gopath != "" {
+		goBinPath := filepath.Join(gopath, "claude-status")
+		if resolvePath(goBinPath) == currentPath {
+			return installMethodGo, goBinPath
+		}
+	}
+
+	goPath := strings.TrimSpace(goEnv("GOPATH"))
+	if goPath != "" {
+		goBinPath := filepath.Join(goPath, "bin", "claude-status")
+		if resolvePath(goBinPath) == currentPath {
+			return installMethodGo, goBinPath
+		}
+	}
+
+	localPath := filepath.Join(home, ".local", "bin", "claude-status")
+	if resolvePath(localPath) == currentPath {
+		return installMethodLocal, localPath
+	}
+
+	return installMethodUnknown, currentPath
+}
+
+func selfUpdate(method installMethod, targetPath string) error {
+	switch method {
+	case installMethodBrew:
+		fmt.Println("Updating claude-status via Homebrew...")
+		return runCommand("", "brew", "upgrade", "claude-status")
+	case installMethodGo:
+		fmt.Println("Updating claude-status via go install...")
+		return runCommand("", "go", "install", moduleInstallTarget)
+	case installMethodLocal, installMethodUnknown:
+		fmt.Println("Updating claude-status via go install and syncing local binary...")
+		if err := runCommand("", "go", "install", moduleInstallTarget); err != nil {
+			return fmt.Errorf("cannot self-update automatically from this installation. Try upgrading manually, then run 'claude-status update --refresh-only': %w", err)
+		}
+		src := installedGoBinaryPath()
+		if src == "" {
+			return fmt.Errorf("cannot locate binary installed by go install")
+		}
+		if err := copyExecutable(src, targetPath); err != nil {
+			return fmt.Errorf("cannot copy updated binary into %s: %w", targetPath, err)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func resolveUpdatedBinaryPath(method installMethod, currentPath, targetPath string) (string, error) {
+	switch method {
+	case installMethodBrew:
+		path, err := exec.LookPath("claude-status")
+		if err != nil {
+			return "", fmt.Errorf("cannot locate updated claude-status after brew upgrade: %w", err)
+		}
+		return resolvePath(path), nil
+	case installMethodGo:
+		path := installedGoBinaryPath()
+		if path == "" {
+			return "", fmt.Errorf("cannot locate updated claude-status after go install")
+		}
+		return path, nil
+	case installMethodLocal, installMethodUnknown:
+		return resolvePath(targetPath), nil
+	default:
+		return currentPath, nil
+	}
+}
+
+func installedGoBinaryPath() string {
+	if gobin := strings.TrimSpace(os.Getenv("GOBIN")); gobin != "" {
+		path := filepath.Join(gobin, "claude-status")
+		if _, err := os.Stat(path); err == nil {
+			return resolvePath(path)
+		}
+	}
+
+	goPath := strings.TrimSpace(goEnv("GOPATH"))
+	if goPath == "" {
+		return ""
+	}
+
+	path := filepath.Join(goPath, "bin", "claude-status")
+	if _, err := os.Stat(path); err == nil {
+		return resolvePath(path)
+	}
+	return ""
+}
+
+func goEnv(key string) string {
+	cmd := exec.Command("go", "env", key)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func runBinary(path string, args ...string) error {
+	cmd := exec.Command(path, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
+func runCommand(dir, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
 }
 
 func copyExecutable(src, dest string) error {

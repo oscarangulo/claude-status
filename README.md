@@ -230,7 +230,7 @@ Restart Claude Code after installing.
 
 ```bash
 claude-status install     # Configure hooks in Claude Code
-claude-status update      # Update hooks after upgrading the binary
+claude-status update      # Upgrade the binary when possible, then refresh hooks
 claude-status uninstall   # Remove hooks (keeps session data)
 claude-status             # TUI dashboard (optional, extra terminal)
 claude-status history     # Show past session cost summaries
@@ -239,19 +239,23 @@ claude-status --version   # Show installed version
 
 ## Updating
 
-When a new version is released, update the binary and then run `update` to refresh the hook scripts:
+When a new version is released, `claude-status update` will try to do the right thing for your install method and then refresh the hook scripts:
+
+```bash
+claude-status update
+```
+
+If automatic binary upgrade is not possible in your environment, upgrade the binary manually and run `claude-status update --refresh-only`.
 
 ### If installed with Homebrew
 
 ```bash
-brew upgrade claude-status
 claude-status update
 ```
 
 ### If installed with `go install`
 
 ```bash
-go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
 claude-status update
 ```
 
