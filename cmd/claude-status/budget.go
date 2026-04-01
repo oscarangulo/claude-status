@@ -71,10 +71,10 @@ func runBudget(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Println("Cost pulse:    every 3 tool calls (default)")
 		}
-		if b.Plan == "pro" {
-			fmt.Println("Plan:          pro (cost alerts disabled, productivity pulse)")
-		} else {
+		if b.Plan == "api" {
 			fmt.Println("Plan:          api (cost alerts at 50%, 80%, 100%)")
+		} else {
+			fmt.Println("Plan:          pro (productivity pulse, no cost alerts)")
 		}
 		fmt.Println("\nAlerts appear directly in your Claude Code conversation.")
 		return nil

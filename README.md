@@ -39,9 +39,6 @@ Claude Code doesn't tell you what you're spending *while* you're spending it. Yo
 
 ```bash
 brew install claude-status
-claude-status budget --plan pro   # subscription (Pro/Max/Team)
-# or
-claude-status budget 20           # API pay-per-token
 ```
 
 Restart Claude Code. Done.
@@ -160,12 +157,12 @@ A brief session summary appears every 3 tool calls so you always know where you 
 **Pro mode** (subscription — Pro/Max/Team):
 > `Session: 3 tasks done, 245K tokens, 32% context, +120/-15 lines, 45min.`
 
-Pro mode disables all cost-based alerts (budget, burn rate, session comparison) and shows productivity metrics instead.
+Pro mode is the default — no configuration needed. If you use the API directly (pay-per-token), switch to API mode for cost tracking:
 
 ```bash
-claude-status budget --plan pro   # enable pro mode
-claude-status budget --plan api   # switch back to cost tracking
-claude-status budget --pulse 5    # change frequency (default: 3)
+claude-status budget --plan api   # enable cost alerts
+claude-status budget 20           # set $20/day limit
+claude-status budget --pulse 5    # change pulse frequency (default: 3)
 ```
 
 ### 10. Subagent cost tracking

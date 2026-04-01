@@ -57,10 +57,13 @@ NEW_CTX=$(echo "$LAST_SNAP" | jq -r '.context_used_pct // 0')
 DURATION_MS=$(echo "$LAST_SNAP" | jq -r '.total_duration_ms // 0')
 DURATION_MIN=$(awk "BEGIN{d=$DURATION_MS/60000; printf \"%d\", (d > 0) ? d : 0}" 2>/dev/null)
 
-# Detect plan mode
-PLAN_MODE=""
+# Default to pro (subscription). Use "api" for pay-per-token.
+PLAN_MODE="pro"
 if [ -f "$BUDGET_FILE" ]; then
-  PLAN_MODE=$(jq -r '.plan // ""' "$BUDGET_FILE" 2>/dev/null)
+  CONFIGURED_PLAN=$(jq -r '.plan // ""' "$BUDGET_FILE" 2>/dev/null)
+  if [ -n "$CONFIGURED_PLAN" ]; then
+    PLAN_MODE="$CONFIGURED_PLAN"
+  fi
 fi
 
 if [ "$PLAN_MODE" = "pro" ]; then

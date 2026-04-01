@@ -197,6 +197,9 @@ echo '{"type":"snapshot","timestamp":"2026-03-26T15:00:00Z","session_id":"est-se
 # Create a new plan with 4 tasks
 EST_PLAN='{"session_id":"est-sess","hook_event_name":"PostToolUse","tool_name":"TodoWrite","tool_input":{"todos":[{"content":"Implement auth","status":"pending"},{"content":"Add tests","status":"pending"},{"content":"Write docs","status":"pending"},{"content":"Deploy","status":"pending"}]}}'
 
+# Set API mode so cost-based plan estimates are enabled
+echo '{"plan":"api"}' > "$EST_DIR/budget.json"
+
 EST_OUT=$(echo "$EST_PLAN" | CLAUDE_STATUS_DIR="$EST_DIR" bash "$SCRIPT_DIR/task-hook.sh" 2>&1)
 
 # Test 1: plan estimate appears in output
@@ -221,7 +224,7 @@ else
 fi
 
 # Test 4: plan with budget — seed budget and check remaining message
-echo '{"daily_limit":10.00}' > "$EST_DIR/budget.json"
+echo '{"daily_limit":10.00,"plan":"api"}' > "$EST_DIR/budget.json"
 EST_OUT2=$(echo "$EST_PLAN" | CLAUDE_STATUS_DIR="$EST_DIR" bash "$SCRIPT_DIR/task-hook.sh" 2>&1)
 if echo "$EST_OUT2" | grep -q "budget\|Budget\|remaining\|limit"; then
   pass "plan estimate includes budget info"
@@ -419,6 +422,7 @@ echo "=== snapshot-hook.sh — session cost comparison ==="
 
 COMP_DIR="$TMPDIR/comp-test"
 mkdir -p "$COMP_DIR/sessions"
+echo '{"plan":"api"}' > "$COMP_DIR/budget.json"
 
 # Create 3 past sessions with avg cost ~$0.10
 for i in 1 2 3; do

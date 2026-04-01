@@ -105,9 +105,13 @@ fi
 ALERTS=""
 
 # Detect plan mode (pro = subscription, skip cost-based alerts)
-PLAN_MODE=""
+# Default to pro (subscription). Use "api" for pay-per-token.
+PLAN_MODE="pro"
 if [ -f "$BUDGET_FILE" ]; then
-  PLAN_MODE=$(jq -r '.plan // ""' "$BUDGET_FILE" 2>/dev/null)
+  CONFIGURED_PLAN=$(jq -r '.plan // ""' "$BUDGET_FILE" 2>/dev/null)
+  if [ -n "$CONFIGURED_PLAN" ]; then
+    PLAN_MODE="$CONFIGURED_PLAN"
+  fi
 fi
 
 # Helper: check if alert was already sent for this session + type
