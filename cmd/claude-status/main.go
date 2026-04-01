@@ -79,7 +79,23 @@ func main() {
 		RunE:  runHistory,
 	}
 
-	rootCmd.AddCommand(installCmd, uninstallCmd, updateCmd, historyCmd)
+	budgetCmd := &cobra.Command{
+		Use:   "budget [amount]",
+		Short: "Set daily spending limit",
+		Long:  "Set a daily budget in USD. You'll get alerts at 50%, 80%, and 100%. Use 0 to disable.",
+		Args:  cobra.MaximumNArgs(1),
+		RunE:  runBudget,
+	}
+	budgetCmd.Flags().Float64("session", 0, "per-session spending limit in USD")
+
+	reportCmd := &cobra.Command{
+		Use:   "report",
+		Short: "Show daily cost report",
+		Long:  "Summary of today's spending: total cost, sessions, tasks, efficiency metrics, and trends.",
+		RunE:  runReport,
+	}
+
+	rootCmd.AddCommand(installCmd, uninstallCmd, updateCmd, historyCmd, budgetCmd, reportCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
