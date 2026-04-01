@@ -406,6 +406,11 @@ func ensureBinaryAvailable(home string) (string, error) {
 		return "", err
 	}
 
+	// If installed via Homebrew (Cellar path), the binary is already in PATH via symlink
+	if strings.Contains(exePath, "/Cellar/") {
+		return exePath, nil
+	}
+
 	exeDir := filepath.Dir(exePath)
 	if dirInPath(exeDir) {
 		return exePath, nil
