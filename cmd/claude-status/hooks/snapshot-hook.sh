@@ -39,6 +39,10 @@ SNAPSHOT=$(grep '"type":"assistant"' "$NATIVE_FILE" 2>/dev/null | jq -sc --arg s
    elif ($model | test("sonnet"; "i")) then {in: 3, out: 15, cr: 0.30, cw: 3.75}
    else {in: 5, out: 25, cr: 0.50, cw: 6.25} end) as $prices |
 
+  (if ($model | test("haiku"; "i")) then 200000
+   elif ($model | test("sonnet"; "i")) then 200000
+   else 1000000 end) as $ctx_window |
+
   ([.[].message.usage.input_tokens // 0] | add) as $input |
   ([.[].message.usage.output_tokens // 0] | add) as $output |
   ([.[].message.usage.cache_read_input_tokens // 0] | add) as $cache_read |
@@ -57,7 +61,7 @@ SNAPSHOT=$(grep '"type":"assistant"' "$NATIVE_FILE" 2>/dev/null | jq -sc --arg s
   (last.message.usage.cache_creation_input_tokens // 0) as $last_cache_write |
   (last.message.usage.output_tokens // 0) as $last_output |
   ($last_input + $last_cache_read + $last_cache_write + $last_output) as $last_total |
-  (if $last_total > 0 then (($last_total * 100) / 200000 | floor) else 0 end) as $ctx_pct |
+  (if $last_total > 0 then (($last_total * 100) / $ctx_window | floor) else 0 end) as $ctx_pct |
 
   {
     type: "snapshot",
@@ -69,7 +73,7 @@ SNAPSHOT=$(grep '"type":"assistant"' "$NATIVE_FILE" 2>/dev/null | jq -sc --arg s
     cache_read_tokens: $cache_read,
     cache_write_tokens: $cache_write,
     context_used_pct: $ctx_pct,
-    context_window_size: 200000,
+    context_window_size: $ctx_window,
     total_duration_ms: ($duration_secs * 1000),
     total_api_duration_ms: 0,
     total_lines_added: 0,

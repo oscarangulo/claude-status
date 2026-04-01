@@ -401,18 +401,58 @@ echo "=== snapshot-hook.sh — context & idle ==="
 CTX_DIR="$TMPDIR/ctx-test"
 mkdir -p "$CTX_DIR/sessions"
 
-# Create native session with very high context usage (tokens sum to >80% of 200k)
+# Test: Sonnet with high context usage (tokens sum to >80% of 200k) triggers warning
 CTX_NATIVE="$TMPDIR/.claude/projects/-test-project/ctx-sess.jsonl"
 cat > "$CTX_NATIVE" <<'NATIVE'
 {"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"ctx-sess"}
-{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":80000,"output_tokens":40000,"cache_read_input_tokens":50000,"cache_creation_input_tokens":10000}},"timestamp":"2026-03-26T15:00:05.000Z","sessionId":"ctx-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-sonnet-4-6","usage":{"input_tokens":80000,"output_tokens":40000,"cache_read_input_tokens":50000,"cache_creation_input_tokens":10000}},"timestamp":"2026-03-26T15:00:05.000Z","sessionId":"ctx-sess"}
 NATIVE
 
 CTX_OUT=$(echo '{"session_id":"ctx-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$CTX_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
 if echo "$CTX_OUT" | grep -q "Context"; then
-  pass "context warning fires at high usage"
+  pass "Sonnet context warning fires at high usage (200k window)"
 else
-  fail "context warning fires at high usage" "output: $CTX_OUT"
+  fail "Sonnet context warning fires at high usage (200k window)" "output: $CTX_OUT"
+fi
+
+# Verify Sonnet snapshot has context_window_size=200000
+CTX_SNAP=$(grep '"type":"snapshot"' "$CTX_DIR/sessions/ctx-sess.jsonl" | tail -1)
+CTX_WIN=$(echo "$CTX_SNAP" | jq -r '.context_window_size')
+if [ "$CTX_WIN" = "200000" ]; then
+  pass "Sonnet snapshot has 200k context window"
+else
+  fail "Sonnet snapshot has 200k context window" "got: $CTX_WIN"
+fi
+
+# Test: Opus with same tokens does NOT trigger context warning (180k / 1M = 18%)
+OPUS_CTX_DIR="$TMPDIR/opus-ctx-test"
+mkdir -p "$OPUS_CTX_DIR/sessions"
+OPUS_CTX_NATIVE="$TMPDIR/.claude/projects/-test-project/opus-ctx-sess.jsonl"
+cat > "$OPUS_CTX_NATIVE" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"opus-ctx-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":80000,"output_tokens":40000,"cache_read_input_tokens":50000,"cache_creation_input_tokens":10000}},"timestamp":"2026-03-26T15:00:05.000Z","sessionId":"opus-ctx-sess"}
+NATIVE
+
+OPUS_CTX_OUT=$(echo '{"session_id":"opus-ctx-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$OPUS_CTX_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if echo "$OPUS_CTX_OUT" | grep -q "Context"; then
+  fail "Opus no context warning at 18% (1M window)" "unexpected alert: $OPUS_CTX_OUT"
+else
+  pass "Opus no context warning at 18% (1M window)"
+fi
+
+# Verify Opus snapshot has context_window_size=1000000 and correct pct
+OPUS_SNAP=$(grep '"type":"snapshot"' "$OPUS_CTX_DIR/sessions/opus-ctx-sess.jsonl" | tail -1)
+OPUS_WIN=$(echo "$OPUS_SNAP" | jq -r '.context_window_size')
+OPUS_PCT=$(echo "$OPUS_SNAP" | jq -r '.context_used_pct')
+if [ "$OPUS_WIN" = "1000000" ]; then
+  pass "Opus snapshot has 1M context window"
+else
+  fail "Opus snapshot has 1M context window" "got: $OPUS_WIN"
+fi
+if [ "$OPUS_PCT" = "18" ]; then
+  pass "Opus context_used_pct is 18% (180k/1M)"
+else
+  fail "Opus context_used_pct is 18% (180k/1M)" "got: $OPUS_PCT"
 fi
 
 # ---------------------------------------------------------------------------
