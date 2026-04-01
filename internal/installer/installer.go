@@ -77,18 +77,24 @@ func InstallWithOptions(opts InstallOptions) error {
 
 	// Extract hook scripts
 	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh"}
+	hooksSkipped := false
 	for _, name := range scripts {
 		data, err := HookFiles.ReadFile("hooks/" + name)
 		if err != nil {
 			return fmt.Errorf("cannot read embedded %s: %w", name, err)
 		}
 		dest := filepath.Join(hooksDir, name)
-		// Remove existing file first to avoid provenance write blocks
-		os.Remove(dest)
+		os.Remove(dest) // try to remove first (may fail in sandbox)
 		if err := os.WriteFile(dest, data, 0755); err != nil {
-			return fmt.Errorf("cannot write %s: %w", dest, err)
+			fmt.Printf("  Skipped %s (run 'claude-status install' manually to update)\n", name)
+			hooksSkipped = true
+			continue
 		}
 		fmt.Printf("  Installed %s\n", dest)
+	}
+	if hooksSkipped {
+		fmt.Println("\n  Some hooks could not be updated (macOS sandbox).")
+		fmt.Println("  Run 'claude-status install' from your terminal to finish.")
 	}
 
 	// Update Claude Code settings
