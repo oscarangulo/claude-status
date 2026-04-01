@@ -311,6 +311,7 @@ claude-status install
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - [jq](https://jqlang.github.io/jq/) (installed automatically with Homebrew)
+- bash and awk (included in macOS, Linux, and Windows Git Bash)
 
 ---
 
@@ -344,6 +345,9 @@ No. Everything stays in `~/.claude-status/`. Zero network calls.
 
 **Does it work in VS Code?**
 Yes. Alerts use `PostToolUse` hooks which work in CLI, VS Code, Cursor, and JetBrains.
+
+**Does it work on Windows?**
+Yes. The Go binary and hooks work on Windows with Git Bash or WSL. Install via `go install` or download the binary from Releases.
 
 **Can I use it without setting a budget?**
 Yes. Loop detection, context warnings, model suggestions, burn rate alerts, and plan estimation all work without a budget.

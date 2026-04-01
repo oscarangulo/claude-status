@@ -98,7 +98,7 @@ jq -cn \
 
 # Alert if subagent was expensive (> $2)
 ALERTS=""
-if [ "$(echo "$COST_USD > 2" | bc 2>/dev/null)" = "1" ]; then
+if [ "$(awk "BEGIN{print ($COST_USD > 2) ? 1 : 0}")" = "1" ]; then
   COST_DISPLAY=$(printf '%.2f' "$COST_USD")
   ALERTS="Expensive subagent: ${AGENT_TYPE} cost \$${COST_DISPLAY}. Consider using Sonnet for this type of work."
 fi

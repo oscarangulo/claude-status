@@ -149,10 +149,10 @@ if [ -f "$BUDGET_FILE" ]; then
       TS=$(echo "$LAST" | jq -r '.timestamp // ""' 2>/dev/null)
       case "$TS" in ${TODAY}*) ;; *) continue ;; esac
       C=$(echo "$LAST" | jq -r '.total_cost_usd // 0' 2>/dev/null)
-      DAILY_COST=$(echo "$DAILY_COST + $C" | bc 2>/dev/null || echo "$DAILY_COST")
+      DAILY_COST=$(awk "BEGIN{printf \"%.4f\", $DAILY_COST + $C}" 2>/dev/null || echo "$DAILY_COST")
     done
 
-    PCT=$(echo "scale=0; $DAILY_COST * 100 / $DAILY_LIMIT" | bc 2>/dev/null || echo "0")
+    PCT=$(awk "BEGIN{printf \"%d\", $DAILY_COST * 100 / $DAILY_LIMIT}" 2>/dev/null || echo "0")
 
     if [ "$PCT" -ge 100 ] && ! alert_sent "budget_100"; then
       add_alert "BUDGET EXCEEDED: Daily spend \$$(printf '%.2f' "$DAILY_COST") has passed your \$${DAILY_LIMIT} limit. Stop or continue at your own risk."
@@ -167,7 +167,7 @@ if [ -f "$BUDGET_FILE" ]; then
   fi
 
   if [ "$SESSION_LIMIT" != "0" ] && [ "$SESSION_LIMIT" != "null" ]; then
-    S_PCT=$(echo "scale=0; $NEW_COST * 100 / $SESSION_LIMIT" | bc 2>/dev/null || echo "0")
+    S_PCT=$(awk "BEGIN{printf \"%d\", $NEW_COST * 100 / $SESSION_LIMIT}" 2>/dev/null || echo "0")
     if [ "$S_PCT" -ge 100 ] && ! alert_sent "session_100"; then
       add_alert "SESSION BUDGET EXCEEDED: \$${NEW_COST} spent, limit is \$${SESSION_LIMIT}."
       mark_alert "session_100"
@@ -190,8 +190,8 @@ fi
 # --- 3. COST ANOMALY (session cost > $5 per 10 minutes) ---
 DURATION_MS=$(echo "$SNAPSHOT" | jq -r '.total_duration_ms // 0')
 if [ "$DURATION_MS" -gt 0 ]; then
-  BURN=$(echo "scale=4; $NEW_COST / ($DURATION_MS / 60000)" | bc 2>/dev/null || echo "0")
-  if [ "$(echo "$BURN > 0.50" | bc 2>/dev/null)" = "1" ] && ! alert_sent "burn_high"; then
+  BURN=$(awk "BEGIN{printf \"%.4f\", $NEW_COST / ($DURATION_MS / 60000)}" 2>/dev/null || echo "0")
+  if [ "$(awk "BEGIN{print ($BURN > 0.50) ? 1 : 0}")" = "1" ] && ! alert_sent "burn_high"; then
     BURN_DISPLAY=$(printf '%.2f' "$BURN")
     add_alert "High burn rate: \$${BURN_DISPLAY}/min. Consider breaking tasks into smaller pieces."
     mark_alert "burn_high"
@@ -243,9 +243,9 @@ if ! alert_sent "cost_high_vs_avg"; then
 
   if [ -n "$AVG_DATA" ] && [ "$AVG_DATA" != "null" ]; then
     AVG_COST=$(echo "$AVG_DATA" | jq -r '.avg')
-    if [ "$(echo "$AVG_COST > 0" | bc 2>/dev/null)" = "1" ]; then
-      RATIO=$(echo "scale=1; $NEW_COST / $AVG_COST" | bc 2>/dev/null || echo "0")
-      if [ "$(echo "$RATIO >= 2.0" | bc 2>/dev/null)" = "1" ]; then
+    if [ "$(awk "BEGIN{print ($AVG_COST > 0) ? 1 : 0}")" = "1" ]; then
+      RATIO=$(awk "BEGIN{printf \"%.1f\", $NEW_COST / $AVG_COST}" 2>/dev/null || echo "0")
+      if [ "$(awk "BEGIN{print ($RATIO >= 2.0) ? 1 : 0}")" = "1" ]; then
         AVG_DISPLAY=$(printf '%.2f' "$AVG_COST")
         COST_DISPLAY=$(printf '%.2f' "$NEW_COST")
         add_alert "Expensive session: \$${COST_DISPLAY} is ${RATIO}x your average (\$${AVG_DISPLAY}). Consider splitting into smaller tasks."

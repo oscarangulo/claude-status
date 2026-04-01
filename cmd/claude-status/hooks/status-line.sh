@@ -85,9 +85,9 @@ jq -cn \
 format_tok() {
   local n=$1
   if [ "$n" -ge 1000000 ]; then
-    printf "%.1fM" "$(echo "scale=1; $n / 1000000" | bc)"
+    awk "BEGIN{printf \"%.1fM\", $n / 1000000}"
   elif [ "$n" -ge 1000 ]; then
-    printf "%.1fK" "$(echo "scale=1; $n / 1000" | bc)"
+    awk "BEGIN{printf \"%.1fK\", $n / 1000}"
   else
     printf "%d" "$n"
   fi
@@ -96,7 +96,7 @@ format_tok() {
 # --- Cache hit rate ---
 TOTAL_IN=$((INPUT_TOK + CACHE_READ))
 if [ "$TOTAL_IN" -gt 0 ]; then
-  CACHE_HIT=$(echo "scale=0; $CACHE_READ * 100 / $TOTAL_IN" | bc)
+  CACHE_HIT=$(awk "BEGIN{printf \"%d\", $CACHE_READ * 100 / $TOTAL_IN}")
 else
   CACHE_HIT=0
 fi
@@ -133,20 +133,20 @@ case "$MODEL" in
 esac
 
 # --- Cost breakdown by type ---
-INPUT_COST=$(echo "scale=6; $INPUT_TOK * $IN_PRICE" | bc)
-OUTPUT_COST=$(echo "scale=6; $OUTPUT_TOK * $OUT_PRICE" | bc)
-CACHE_R_COST=$(echo "scale=6; $CACHE_READ * $CACHE_R_PRICE" | bc)
-CACHE_W_COST=$(echo "scale=6; $CACHE_WRITE * $CACHE_W_PRICE" | bc)
+INPUT_COST=$(awk "BEGIN{printf \"%.6f\", $INPUT_TOK * $IN_PRICE}")
+OUTPUT_COST=$(awk "BEGIN{printf \"%.6f\", $OUTPUT_TOK * $OUT_PRICE}")
+CACHE_R_COST=$(awk "BEGIN{printf \"%.6f\", $CACHE_READ * $CACHE_R_PRICE}")
+CACHE_W_COST=$(awk "BEGIN{printf \"%.6f\", $CACHE_WRITE * $CACHE_W_PRICE}")
 
 # Cache savings = what you would have paid at full input price minus what you actually paid
-CACHE_SAVINGS=$(echo "scale=6; ($CACHE_READ * $IN_PRICE) - ($CACHE_READ * $CACHE_R_PRICE)" | bc)
+CACHE_SAVINGS=$(awk "BEGIN{printf \"%.6f\", ($CACHE_READ * $IN_PRICE) - ($CACHE_READ * $CACHE_R_PRICE)}")
 CACHE_SAVINGS_DISPLAY=$(printf "%.4f" "$CACHE_SAVINGS")
 
 # --- Burn rate ($/min) ---
 BURN_RATE="0"
 if [ "$TOTAL_DURATION" -gt 60000 ]; then
-  MINUTES=$(echo "scale=2; $TOTAL_DURATION / 60000" | bc)
-  BURN_RATE=$(echo "scale=4; $TOTAL_COST / $MINUTES" | bc)
+  MINUTES=$(awk "BEGIN{printf \"%.2f\", $TOTAL_DURATION / 60000}")
+  BURN_RATE=$(awk "BEGIN{printf \"%.4f\", $TOTAL_COST / $MINUTES}")
 fi
 
 # --- Duration ---
@@ -190,9 +190,9 @@ fi
 
 # --- Cost color ---
 COST_VAL=$(printf "%.4f" "$TOTAL_COST")
-if [ "$(echo "$TOTAL_COST > 1" | bc)" -eq 1 ]; then
+if [ "$(awk "BEGIN{print ($TOTAL_COST > 1) ? 1 : 0}")" -eq 1 ]; then
   COST_DISPLAY="${RED}${BOLD}\$${COST_VAL}${RST}"
-elif [ "$(echo "$TOTAL_COST > 0.5" | bc)" -eq 1 ]; then
+elif [ "$(awk "BEGIN{print ($TOTAL_COST > 0.5) ? 1 : 0}")" -eq 1 ]; then
   COST_DISPLAY="${YELLOW}\$${COST_VAL}${RST}"
 else
   COST_DISPLAY="${GREEN}\$${COST_VAL}${RST}"
@@ -206,11 +206,11 @@ fi
 
 # --- Burn rate display ---
 BURN_DISPLAY=""
-if [ "$(echo "$BURN_RATE > 0" | bc)" -eq 1 ]; then
+if [ "$(awk "BEGIN{print ($BURN_RATE > 0) ? 1 : 0}")" -eq 1 ]; then
   BURN_VAL=$(printf "%.3f" "$BURN_RATE")
-  if [ "$(echo "$BURN_RATE > 0.1" | bc)" -eq 1 ]; then
+  if [ "$(awk "BEGIN{print ($BURN_RATE > 0.1) ? 1 : 0}")" -eq 1 ]; then
     BURN_DISPLAY=" ${DIM}(${RST}${RED}\$${BURN_VAL}/min${RST}${DIM})${RST}"
-  elif [ "$(echo "$BURN_RATE > 0.05" | bc)" -eq 1 ]; then
+  elif [ "$(awk "BEGIN{print ($BURN_RATE > 0.05) ? 1 : 0}")" -eq 1 ]; then
     BURN_DISPLAY=" ${DIM}(${RST}${YELLOW}\$${BURN_VAL}/min${RST}${DIM})${RST}"
   else
     BURN_DISPLAY=" ${DIM}(\$${BURN_VAL}/min)${RST}"
@@ -219,7 +219,7 @@ fi
 
 # --- Cache savings display ---
 SAVINGS_DISPLAY=""
-if [ "$(echo "$CACHE_SAVINGS > 0.001" | bc)" -eq 1 ]; then
+if [ "$(awk "BEGIN{print ($CACHE_SAVINGS > 0.001) ? 1 : 0}")" -eq 1 ]; then
   SAVINGS_DISPLAY=" ${DIM}|${RST} ${GREEN}Cache saved \$${CACHE_SAVINGS_DISPLAY}${RST}"
 fi
 
@@ -234,7 +234,7 @@ if [ -f "$LOG_FILE" ]; then
     COMPLETED=$(grep "\"task_id\":\"$TASK_ID\".*\"event\":\"task_completed\"" "$LOG_FILE" 2>/dev/null | tail -1 || echo "")
 
     if [ -z "$COMPLETED" ]; then
-      TASK_DELTA=$(printf "%.4f" "$(echo "scale=4; $TOTAL_COST - $TASK_COST_START" | bc)")
+      TASK_DELTA=$(awk "BEGIN{printf \"%.4f\", $TOTAL_COST - $TASK_COST_START}")
       if [ ${#TASK_SUBJECT} -gt 35 ]; then
         TASK_SUBJECT="${TASK_SUBJECT:0:32}..."
       fi

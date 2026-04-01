@@ -500,7 +500,7 @@ fi
 
 # Test 4: cost is computed (should be > 0)
 SA_COST=$(grep '"type":"subagent_event"' "$SA_JSONL" | jq -r '.cost_usd')
-if [ "$(echo "$SA_COST > 0" | bc)" = "1" ]; then
+if [ "$(awk "BEGIN{print ($SA_COST > 0) ? 1 : 0}")" = "1" ]; then
   pass "cost computed from transcript"
 else
   fail "cost computed from transcript" "got: $SA_COST"

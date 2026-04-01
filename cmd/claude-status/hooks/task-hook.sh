@@ -102,9 +102,9 @@ compute_plan_estimate() {
       START_LINE=$(grep "\"event\":\"task_started\"" "$sf" 2>/dev/null | grep "\"task_key\":\"$TASK_KEY_C\"" | tail -1 || echo "")
       if [ -n "$START_LINE" ]; then
         START_COST=$(echo "$START_LINE" | jq -r '.cost_snapshot_usd // 0')
-        DELTA=$(echo "scale=4; $END_COST - $START_COST" | bc 2>/dev/null || echo "0")
-        if [ "$(echo "$DELTA > 0" | bc 2>/dev/null)" = "1" ]; then
-          AVG_TASK_COST=$(echo "scale=4; $AVG_TASK_COST + $DELTA" | bc 2>/dev/null)
+        DELTA=$(awk "BEGIN{printf \"%.4f\", $END_COST - $START_COST}" 2>/dev/null || echo "0")
+        if [ "$(awk "BEGIN{print ($DELTA > 0) ? 1 : 0}")" = "1" ]; then
+          AVG_TASK_COST=$(awk "BEGIN{printf \"%.4f\", $AVG_TASK_COST + $DELTA}" 2>/dev/null)
           COMPLETED_TASKS=$((COMPLETED_TASKS + 1))
         fi
       fi
@@ -112,8 +112,8 @@ compute_plan_estimate() {
   done
 
   if [ "$COMPLETED_TASKS" -ge 2 ]; then
-    AVG_PER_TASK=$(echo "scale=4; $AVG_TASK_COST / $COMPLETED_TASKS" | bc 2>/dev/null || echo "0")
-    ESTIMATED_TOTAL=$(echo "scale=2; $AVG_PER_TASK * $num_tasks" | bc 2>/dev/null || echo "0")
+    AVG_PER_TASK=$(awk "BEGIN{printf \"%.4f\", $AVG_TASK_COST / $COMPLETED_TASKS}" 2>/dev/null || echo "0")
+    ESTIMATED_TOTAL=$(awk "BEGIN{printf \"%.2f\", $AVG_PER_TASK * $num_tasks}" 2>/dev/null || echo "0")
     AVG_DISPLAY=$(printf '%.2f' "$AVG_PER_TASK")
     EST_DISPLAY=$(printf '%.2f' "$ESTIMATED_TOTAL")
 
@@ -123,7 +123,7 @@ compute_plan_estimate() {
     BUDGET_FILE="$DATA_DIR/budget.json"
     if [ -f "$BUDGET_FILE" ]; then
       DAILY_LIMIT=$(jq -r '.daily_limit // 0' "$BUDGET_FILE" 2>/dev/null)
-      if [ "$(echo "$DAILY_LIMIT > 0" | bc 2>/dev/null)" = "1" ]; then
+      if [ "$(awk "BEGIN{print ($DAILY_LIMIT > 0) ? 1 : 0}")" = "1" ]; then
         # Get today's total spend across all sessions
         TODAY=$(date -u +"%Y-%m-%d")
         TODAY_SPEND=0
@@ -134,15 +134,15 @@ compute_plan_estimate() {
             SNAP_DATE=$(echo "$LAST_SNAP" | jq -r '.timestamp // ""' | cut -c1-10)
             if [ "$SNAP_DATE" = "$TODAY" ]; then
               SNAP_COST=$(echo "$LAST_SNAP" | jq -r '.total_cost_usd // 0')
-              TODAY_SPEND=$(echo "scale=4; $TODAY_SPEND + $SNAP_COST" | bc 2>/dev/null)
+              TODAY_SPEND=$(awk "BEGIN{printf \"%.4f\", $TODAY_SPEND + $SNAP_COST}" 2>/dev/null)
             fi
           fi
         done
 
-        REMAINING=$(echo "scale=2; $DAILY_LIMIT - $TODAY_SPEND" | bc 2>/dev/null || echo "0")
+        REMAINING=$(awk "BEGIN{printf \"%.2f\", $DAILY_LIMIT - $TODAY_SPEND}" 2>/dev/null || echo "0")
         REM_DISPLAY=$(printf '%.2f' "$REMAINING")
 
-        if [ "$(echo "$ESTIMATED_TOTAL > $REMAINING" | bc 2>/dev/null)" = "1" ]; then
+        if [ "$(awk "BEGIN{print ($ESTIMATED_TOTAL > $REMAINING) ? 1 : 0}")" = "1" ]; then
           alerts="${alerts} WARNING: This may exceed your remaining budget (\$${REM_DISPLAY}). Consider splitting into phases or using Sonnet."
         else
           alerts="${alerts} Budget remaining: \$${REM_DISPLAY}. This plan fits within your daily limit."
