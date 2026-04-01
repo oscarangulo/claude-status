@@ -83,6 +83,8 @@ func InstallWithOptions(opts InstallOptions) error {
 			return fmt.Errorf("cannot read embedded %s: %w", name, err)
 		}
 		dest := filepath.Join(hooksDir, name)
+		// Remove existing file first to avoid provenance write blocks
+		os.Remove(dest)
 		if err := os.WriteFile(dest, data, 0755); err != nil {
 			return fmt.Errorf("cannot write %s: %w", dest, err)
 		}
