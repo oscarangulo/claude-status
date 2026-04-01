@@ -90,6 +90,7 @@ func main() {
 	}
 	budgetCmd.Flags().Float64("session", 0, "per-session spending limit in USD")
 	budgetCmd.Flags().Int("pulse", 0, "show cost pulse every N tool calls (default: 3)")
+	budgetCmd.Flags().String("plan", "", "set plan type: 'pro' (subscription) or 'api' (pay-per-token)")
 
 	reportCmd := &cobra.Command{
 		Use:   "report",

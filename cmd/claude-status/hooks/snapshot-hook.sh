@@ -104,6 +104,12 @@ fi
 
 ALERTS=""
 
+# Detect plan mode (pro = subscription, skip cost-based alerts)
+PLAN_MODE=""
+if [ -f "$BUDGET_FILE" ]; then
+  PLAN_MODE=$(jq -r '.plan // ""' "$BUDGET_FILE" 2>/dev/null)
+fi
+
 # Helper: check if alert was already sent for this session + type
 alert_sent() {
   local key="$1"
@@ -133,8 +139,8 @@ add_alert() {
   fi
 }
 
-# --- 1. BUDGET ALERTS ---
-if [ -f "$BUDGET_FILE" ]; then
+# --- 1. BUDGET ALERTS (skip on pro plan) ---
+if [ "$PLAN_MODE" != "pro" ] && [ -f "$BUDGET_FILE" ]; then
   DAILY_LIMIT=$(jq -r '.daily_limit // 0' "$BUDGET_FILE" 2>/dev/null)
   SESSION_LIMIT=$(jq -r '.session_limit // 0' "$BUDGET_FILE" 2>/dev/null)
 
@@ -187,9 +193,9 @@ elif [ "$NEW_CTX" -ge 80 ] && ! alert_sent "ctx_80"; then
   mark_alert "ctx_80"
 fi
 
-# --- 3. COST ANOMALY (session cost > $5 per 10 minutes) ---
+# --- 3. COST ANOMALY (skip on pro plan) ---
 DURATION_MS=$(echo "$SNAPSHOT" | jq -r '.total_duration_ms // 0')
-if [ "$DURATION_MS" -gt 0 ]; then
+if [ "$PLAN_MODE" != "pro" ] && [ "$DURATION_MS" -gt 0 ]; then
   BURN=$(awk "BEGIN{printf \"%.4f\", $NEW_COST / ($DURATION_MS / 60000)}" 2>/dev/null || echo "0")
   if [ "$(awk "BEGIN{print ($BURN > 0.50) ? 1 : 0}")" = "1" ] && ! alert_sent "burn_high"; then
     BURN_DISPLAY=$(printf '%.2f' "$BURN")
@@ -232,9 +238,8 @@ if [ -n "$TOOL_NAME" ] && [ "$TOOL_NAME" != "null" ]; then
   fi
 fi
 
-# --- 5. SESSION COST COMPARISON ---
-# Alert when current session costs 2x the average of past sessions
-if ! alert_sent "cost_high_vs_avg"; then
+# --- 5. SESSION COST COMPARISON (skip on pro plan) ---
+if [ "$PLAN_MODE" != "pro" ] && ! alert_sent "cost_high_vs_avg"; then
   AVG_DATA=$(for sf in "$SESSION_DIR"/*.jsonl; do
     [ -f "$sf" ] || continue
     [ "$sf" = "$LOG_FILE" ] && continue
@@ -316,13 +321,41 @@ echo "$PULSE_COUNT" > "$PULSE_FILE"
 
 if [ $(( PULSE_COUNT % PULSE_EVERY )) -eq 0 ]; then
   DURATION_MIN=$(awk "BEGIN{d=$DURATION_MS/60000; printf \"%d\", (d > 0) ? d : 0}" 2>/dev/null)
-  BURN_DISPLAY=""
-  if [ "$DURATION_MIN" -gt 0 ]; then
-    PULSE_BURN=$(awk "BEGIN{printf \"%.2f\", $NEW_COST / $DURATION_MIN}" 2>/dev/null || echo "0")
-    BURN_DISPLAY=", \$${PULSE_BURN}/min"
+
+  if [ "$PLAN_MODE" = "pro" ]; then
+    # Pro mode: productivity pulse (no cost)
+    TOTAL_TOKENS=$(echo "$SNAPSHOT" | jq -r '(.total_input_tokens // 0) + (.total_output_tokens // 0)')
+    TOKENS_DISPLAY=$(awk "BEGIN{t=$TOTAL_TOKENS; if(t>=1000000) printf \"%.1fM\",t/1000000; else if(t>=1000) printf \"%.0fK\",t/1000; else printf \"%d\",t}" 2>/dev/null)
+    LINES_ADDED=$(echo "$SNAPSHOT" | jq -r '.total_lines_added // 0')
+    LINES_REMOVED=$(echo "$SNAPSHOT" | jq -r '.total_lines_removed // 0')
+    LINES_INFO=""
+    if [ "$LINES_ADDED" -gt 0 ] || [ "$LINES_REMOVED" -gt 0 ]; then
+      LINES_INFO=", +${LINES_ADDED}/-${LINES_REMOVED} lines"
+    fi
+    TIME_INFO=""
+    if [ "$DURATION_MIN" -gt 0 ]; then
+      TIME_INFO=", ${DURATION_MIN}min"
+    fi
+    # Count completed tasks in this session
+    TASK_COUNT=0
+    if [ -f "$LOG_FILE" ]; then
+      TASK_COUNT=$(grep -c '"event":"task_completed"' "$LOG_FILE" 2>/dev/null || echo "0")
+    fi
+    TASK_INFO=""
+    if [ "$TASK_COUNT" -gt 0 ]; then
+      TASK_INFO="${TASK_COUNT} tasks done, "
+    fi
+    add_alert "Session: ${TASK_INFO}${TOKENS_DISPLAY} tokens, ${NEW_CTX}% context${LINES_INFO}${TIME_INFO}."
+  else
+    # API mode: cost pulse
+    BURN_DISPLAY=""
+    if [ "$DURATION_MIN" -gt 0 ]; then
+      PULSE_BURN=$(awk "BEGIN{printf \"%.2f\", $NEW_COST / $DURATION_MIN}" 2>/dev/null || echo "0")
+      BURN_DISPLAY=", \$${PULSE_BURN}/min"
+    fi
+    COST_DISPLAY=$(printf '%.2f' "$NEW_COST")
+    add_alert "Session: \$${COST_DISPLAY} spent, ${NEW_CTX}% context${BURN_DISPLAY}."
   fi
-  COST_DISPLAY=$(printf '%.2f' "$NEW_COST")
-  add_alert "Session: \$${COST_DISPLAY} spent, ${NEW_CTX}% context${BURN_DISPLAY}."
 fi
 
 # --- OUTPUT ---

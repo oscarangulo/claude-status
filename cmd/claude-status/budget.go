@@ -19,6 +19,7 @@ type budgetConfig struct {
 	DailyLimit   float64 `json:"daily_limit"`
 	SessionLimit float64 `json:"session_limit"`
 	PulseEvery   int     `json:"pulse_every,omitempty"`
+	Plan         string  `json:"plan,omitempty"` // "pro" for subscription plans (skips cost alerts)
 }
 
 func budgetFilePath() string {
@@ -47,9 +48,10 @@ func saveBudget(b budgetConfig) error {
 func runBudget(cmd *cobra.Command, args []string) error {
 	sessionLimit, _ := cmd.Flags().GetFloat64("session")
 	pulseEvery, _ := cmd.Flags().GetInt("pulse")
+	planMode, _ := cmd.Flags().GetString("plan")
 	b := loadBudget()
 
-	if len(args) == 0 && sessionLimit == 0 && pulseEvery == 0 {
+	if len(args) == 0 && sessionLimit == 0 && pulseEvery == 0 && planMode == "" {
 		// Show current budget
 		if b.DailyLimit == 0 && b.SessionLimit == 0 {
 			fmt.Println("No budget set. Usage:")
@@ -69,7 +71,12 @@ func runBudget(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Println("Cost pulse:    every 3 tool calls (default)")
 		}
-		fmt.Println("\nAlerts fire at 50%, 80%, and 100% of each limit.")
+		if b.Plan == "pro" {
+			fmt.Println("Plan:          pro (cost alerts disabled, productivity pulse)")
+		} else {
+			fmt.Println("Plan:          api (cost alerts at 50%, 80%, 100%)")
+		}
+		fmt.Println("\nAlerts appear directly in your Claude Code conversation.")
 		return nil
 	}
 
@@ -89,6 +96,14 @@ func runBudget(cmd *cobra.Command, args []string) error {
 		b.PulseEvery = pulseEvery
 	}
 
+	if planMode != "" {
+		if planMode == "pro" || planMode == "api" {
+			b.Plan = planMode
+		} else {
+			return fmt.Errorf("invalid plan %q: use 'pro' (subscription) or 'api' (pay-per-token)", planMode)
+		}
+	}
+
 	if err := saveBudget(b); err != nil {
 		return fmt.Errorf("cannot save budget: %w", err)
 	}
@@ -104,8 +119,11 @@ func runBudget(cmd *cobra.Command, args []string) error {
 	if b.PulseEvery > 0 {
 		fmt.Printf("Cost pulse every %d tool calls\n", b.PulseEvery)
 	}
+	if b.Plan == "pro" {
+		fmt.Println("Plan: pro (subscription — cost alerts disabled, productivity pulse enabled)")
+	}
 
-	fmt.Println("\nYou'll get alerts at 50%, 80%, and 100% — directly in your Claude Code conversation.")
+	fmt.Println("\nAlerts appear directly in your Claude Code conversation.")
 	return nil
 }
 

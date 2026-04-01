@@ -181,8 +181,13 @@ case "$HOOK_EVENT" in
                 fi
             done
 
-            # If 3+ new tasks, this is a new plan — estimate cost
-            if [ "$NEW_PLAN_TASKS" -ge 3 ]; then
+            # If 3+ new tasks, this is a new plan — estimate cost (skip on pro plan)
+            TASK_PLAN_MODE=""
+            TASK_BUDGET_FILE="$DATA_DIR/budget.json"
+            if [ -f "$TASK_BUDGET_FILE" ]; then
+                TASK_PLAN_MODE=$(jq -r '.plan // ""' "$TASK_BUDGET_FILE" 2>/dev/null)
+            fi
+            if [ "$NEW_PLAN_TASKS" -ge 3 ] && [ "$TASK_PLAN_MODE" != "pro" ]; then
                 PLAN_ALERT=$(compute_plan_estimate "$NEW_PLAN_TASKS")
             fi
 

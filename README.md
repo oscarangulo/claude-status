@@ -39,7 +39,9 @@ Claude Code doesn't tell you what you're spending *while* you're spending it. Yo
 
 ```bash
 brew install claude-status
-claude-status budget 20
+claude-status budget --plan pro   # subscription (Pro/Max/Team)
+# or
+claude-status budget 20           # API pay-per-token
 ```
 
 Restart Claude Code. Done.
@@ -148,22 +150,22 @@ When Claude creates a plan with 3+ tasks, you get an instant cost estimate based
 
 Accuracy improves as you complete more tasks. Needs 2+ completed tasks for the first estimate.
 
-### 9. Cost pulse
+### 9. Session pulse
 
-A brief cost summary appears every 3 tool calls so you always know where you stand — no need to check `/cost`.
+A brief session summary appears every 3 tool calls so you always know where you stand.
 
+**API mode** (pay-per-token):
 > `Session: $4.50 spent, 32% context, $0.45/min.`
 
-Configure the frequency in your budget:
+**Pro mode** (subscription — Pro/Max/Team):
+> `Session: 3 tasks done, 245K tokens, 32% context, +120/-15 lines, 45min.`
+
+Pro mode disables all cost-based alerts (budget, burn rate, session comparison) and shows productivity metrics instead.
 
 ```bash
-claude-status budget --pulse 5   # every 5 tool calls instead of 3
-```
-
-Or set it directly in `~/.claude-status/budget.json`:
-
-```json
-{"daily_limit": 20, "pulse_every": 5}
+claude-status budget --plan pro   # enable pro mode
+claude-status budget --plan api   # switch back to cost tracking
+claude-status budget --pulse 5    # change frequency (default: 3)
 ```
 
 ### 10. Subagent cost tracking
