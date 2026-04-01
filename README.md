@@ -214,13 +214,11 @@ If Claude Code runs there, claude-status works there.
 You use Claude Code normally
          |
          v
-Hooks run automatically after each response (< 50ms)
+After each response: pulse-hook.sh counts interactions (< 50ms)
+After each tool call: snapshot-hook.sh computes metrics + checks alerts (< 50ms)
          |
          v
-Read session data, compute metrics, check alert conditions
-         |
-         v
-Every N responses  -->  Pulse with session metrics
+Every N responses  -->  Pulse with session metrics (works in conversation too)
 Alert triggered?   -->  Warning appears in conversation
 Nothing wrong?     -->  Silent, zero interruption
 ```
