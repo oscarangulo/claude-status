@@ -321,44 +321,50 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# snapshot-hook.sh — cost pulse tests
+# pulse-hook.sh tests
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== snapshot-hook.sh — cost pulse ==="
+echo "=== pulse-hook.sh ==="
 
 PULSE_DIR="$TMPDIR/pulse-test"
 mkdir -p "$PULSE_DIR/sessions"
 
-# Create native session
-PULSE_NATIVE="$TMPDIR/.claude/projects/-test-project/pulse-sess.jsonl"
-cat > "$PULSE_NATIVE" <<'NATIVE'
-{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"pulse-sess"}
-{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":5000,"output_tokens":1000,"cache_read_input_tokens":500,"cache_creation_input_tokens":200}},"timestamp":"2026-03-26T15:01:00.000Z","sessionId":"pulse-sess"}
-NATIVE
+# Seed a snapshot so pulse-hook has data to read
+echo '{"type":"snapshot","timestamp":"2026-03-26T15:01:00Z","session_id":"pulse-sess","total_cost_usd":0.50,"total_input_tokens":20000,"total_output_tokens":5000,"cache_read_tokens":8000,"cache_write_tokens":3000,"context_used_pct":18,"context_window_size":1000000,"total_duration_ms":90000,"total_api_duration_ms":12000,"total_lines_added":45,"total_lines_removed":3,"model":"claude-opus-4-6"}' > "$PULSE_DIR/sessions/pulse-sess.jsonl"
 
 # Seed pulse counter at 2 so next run is call #3 (triggers pulse)
 echo "2" > "$PULSE_DIR/pulse-pulse-sess"
 
-PULSE_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+PULSE_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
 
 if echo "$PULSE_OUT" | grep -q "Session:"; then
-  pass "cost pulse fires on 3rd snapshot"
+  pass "pulse fires on 3rd call"
 else
-  fail "cost pulse fires on 3rd snapshot" "output: $PULSE_OUT"
+  fail "pulse fires on 3rd call" "output: $PULSE_OUT"
 fi
 
 if echo "$PULSE_OUT" | grep -q "context"; then
-  pass "cost pulse includes context %"
+  pass "pulse includes context %"
 else
-  fail "cost pulse includes context %" "output: $PULSE_OUT"
+  fail "pulse includes context %" "output: $PULSE_OUT"
 fi
 
-# Test: pulse does NOT fire on 4th snapshot (not multiple of 3)
-PULSE_OUT2=$(echo '{"session_id":"pulse-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+# Test: pulse does NOT fire on 4th call (not multiple of 3)
+PULSE_OUT2=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
 if [ "$PULSE_OUT2" = "{}" ]; then
-  pass "no pulse on non-multiple snapshot"
+  pass "no pulse on non-multiple call"
 else
-  fail "no pulse on non-multiple snapshot" "output: $PULSE_OUT2"
+  fail "no pulse on non-multiple call" "output: $PULSE_OUT2"
+fi
+
+# Test: pro mode shows tokens instead of cost
+echo '{"daily_limit":0,"plan":"pro"}' > "$PULSE_DIR/budget.json"
+echo "5" > "$PULSE_DIR/pulse-pulse-sess"
+PULSE_PRO=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
+if echo "$PULSE_PRO" | grep -q "tokens"; then
+  pass "pro mode shows tokens"
+else
+  fail "pro mode shows tokens" "output: $PULSE_PRO"
 fi
 
 # ---------------------------------------------------------------------------

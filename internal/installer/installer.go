@@ -76,7 +76,7 @@ func InstallWithOptions(opts InstallOptions) error {
 	}
 
 	// Extract hook scripts
-	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh"}
+	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh", "pulse-hook.sh"}
 	hooksSkipped := false
 	for _, name := range scripts {
 		data, err := HookFiles.ReadFile("hooks/" + name)
@@ -137,6 +137,7 @@ func InstallWithOptions(opts InstallOptions) error {
 	taskHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "task-hook.sh"))
 	snapshotHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "snapshot-hook.sh"))
 	subagentHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "subagent-hook.sh"))
+	pulseHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "pulse-hook.sh"))
 
 	// PostToolUse hook for TodoWrite (task tracking)
 	postToolHook := hookEntry{
@@ -159,6 +160,13 @@ func InstallWithOptions(opts InstallOptions) error {
 	}
 	subagentJSON, _ := json.Marshal(subagentHook)
 	existingHooks["SubagentStop"] = appendIfNotPresent(existingHooks["SubagentStop"], subagentJSON, subagentHookCmd)
+
+	// Stop hook (pulse — periodic session summary)
+	pulseHook := hookEntry{
+		Hooks: []hookAction{{Type: "command", Command: pulseHookCmd}},
+	}
+	pulseJSON, _ := json.Marshal(pulseHook)
+	existingHooks["Stop"] = appendIfNotPresent(existingHooks["Stop"], pulseJSON, pulseHookCmd)
 
 	hooksJSON, _ := json.Marshal(existingHooks)
 	settings["hooks"] = json.RawMessage(hooksJSON)
@@ -338,7 +346,7 @@ func removeClaudeSetup(home, hooksDir string) error {
 		}
 	}
 
-	for _, name := range []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh"} {
+	for _, name := range []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh", "pulse-hook.sh"} {
 		path := filepath.Join(hooksDir, name)
 		if err := os.Remove(path); err == nil {
 			fmt.Printf("  Removed %s\n", path)
