@@ -38,9 +38,11 @@ func main() {
 		Long:  "Configures Claude Code with the status-line and task-tracking hooks needed for monitoring.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("claude-status %s\n\n", version)
-			return installer.Install()
+			yes, _ := cmd.Flags().GetBool("yes")
+			return installer.InstallWithOptions(installer.InstallOptions{SkipPrompt: yes})
 		},
 	}
+	installCmd.Flags().Bool("yes", false, "non-interactive install (skip budget prompt)")
 
 	uninstallCmd := &cobra.Command{
 		Use:   "uninstall",

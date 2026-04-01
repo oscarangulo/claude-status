@@ -44,7 +44,16 @@ type UninstallOptions struct {
 	Out  io.Writer
 }
 
+// InstallOptions controls installer behavior.
+type InstallOptions struct {
+	SkipPrompt bool // skip interactive budget prompt (for automated installs)
+}
+
 func Install() error {
+	return InstallWithOptions(InstallOptions{})
+}
+
+func InstallWithOptions(opts InstallOptions) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("cannot find home directory: %w", err)
@@ -150,8 +159,12 @@ func Install() error {
 
 	fmt.Println("\nInstallation complete! Restart Claude Code to activate.")
 
-	// Prompt for budget configuration
-	promptBudget(home)
+	// Prompt for budget configuration (skip in automated mode)
+	if !opts.SkipPrompt {
+		promptBudget(home)
+	} else {
+		fmt.Println("\n  Set a budget with: claude-status budget <amount>")
+	}
 
 	return nil
 }
