@@ -40,16 +40,16 @@ claude-status watches your Claude Code spending and alerts you before things get
 ## Quick Start
 
 ```bash
-# Install
-brew tap oscarangulo/claude-status && brew install claude-status
+# Install (hooks are configured automatically)
+brew install oscarangulo/claude-status/claude-status
 
-# Set up hooks and a daily budget
-claude-status install
+# Set a daily budget (optional)
+claude-status budget 20
 
 # Restart Claude Code — alerts start automatically
 ```
 
-The installer will ask you to set a daily budget. You can always change it later:
+Set a spending limit and get warned before you blow it:
 
 ```bash
 claude-status budget 30       # $30/day limit
@@ -185,10 +185,10 @@ Run `claude-status` with no arguments to open the terminal dashboard. Shows real
 ### Option 1: Homebrew (macOS / Linux)
 
 ```bash
-brew tap oscarangulo/claude-status
-brew install claude-status
-claude-status install
+brew install oscarangulo/claude-status/claude-status
 ```
+
+Hooks are configured automatically. Just restart Claude Code.
 
 ### Option 2: Go install
 
