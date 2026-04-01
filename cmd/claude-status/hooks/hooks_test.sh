@@ -173,6 +173,88 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# snapshot-hook.sh tests
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== snapshot-hook.sh ==="
+
+SNAP_DIR="$TMPDIR/snap-test"
+mkdir -p "$SNAP_DIR/sessions"
+
+# Create a mock native Claude Code session structure
+NATIVE_DIR="$TMPDIR/.claude/projects/-test-project"
+mkdir -p "$NATIVE_DIR"
+cat > "$NATIVE_DIR/snap-sess.jsonl" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"snap-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":500,"cache_creation_input_tokens":200}},"timestamp":"2026-03-26T15:00:05.000Z","sessionId":"snap-sess"}
+{"type":"user","message":{"role":"user","content":"do more"},"timestamp":"2026-03-26T15:01:00.000Z","sessionId":"snap-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":150,"output_tokens":80,"cache_read_input_tokens":600,"cache_creation_input_tokens":100}},"timestamp":"2026-03-26T15:01:10.000Z","sessionId":"snap-sess"}
+NATIVE
+
+SNAP_INPUT='{"session_id":"snap-sess","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{}}'
+
+# Override HOME so find looks in the right place
+SNAP_OUT=$(echo "$SNAP_INPUT" | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$SNAP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1) && pass "exits 0" || fail "exits 0" "non-zero exit"
+
+SNAP_JSONL="$SNAP_DIR/sessions/snap-sess.jsonl"
+
+# Test 1: snapshot was written
+if [ -f "$SNAP_JSONL" ] && grep -q '"type":"snapshot"' "$SNAP_JSONL"; then
+  pass "writes snapshot"
+else
+  fail "writes snapshot" "no snapshot in file"
+fi
+
+# Test 2: snapshot has correct fields
+if grep '"type":"snapshot"' "$SNAP_JSONL" | jq -e '.total_cost_usd > 0' >/dev/null 2>&1; then
+  pass "cost is computed"
+else
+  fail "cost is computed" "cost is 0 or missing"
+fi
+
+if grep '"type":"snapshot"' "$SNAP_JSONL" | jq -e '.model == "claude-opus-4-6"' >/dev/null 2>&1; then
+  pass "model detected"
+else
+  fail "model detected" "wrong model"
+fi
+
+if grep '"type":"snapshot"' "$SNAP_JSONL" | jq -e '.cache_read_tokens == 1100' >/dev/null 2>&1; then
+  pass "cache_read aggregated (500+600=1100)"
+else
+  fail "cache_read aggregated" "wrong value"
+fi
+
+if grep '"type":"snapshot"' "$SNAP_JSONL" | jq -e '.total_duration_ms > 0' >/dev/null 2>&1; then
+  pass "duration computed"
+else
+  fail "duration computed" "duration is 0"
+fi
+
+# Test 3: duplicate suppression (same cost = no new snapshot)
+echo "$SNAP_INPUT" | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$SNAP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" >/dev/null 2>&1
+SNAP_COUNT=$(grep -c '"type":"snapshot"' "$SNAP_JSONL")
+if [ "$SNAP_COUNT" -eq 1 ]; then
+  pass "deduplicates snapshots"
+else
+  fail "deduplicates snapshots" "expected 1 snapshot, got $SNAP_COUNT"
+fi
+
+# Test 4: missing native file gracefully returns {}
+MISSING_OUT=$(echo '{"session_id":"nonexistent","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{}}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$SNAP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if [ "$MISSING_OUT" = "{}" ]; then
+  pass "graceful on missing session"
+else
+  fail "graceful on missing session" "output: $MISSING_OUT"
+fi
+
+# Test 5: output is always {}
+if [ "$SNAP_OUT" = "{}" ]; then
+  pass "output is {}"
+else
+  fail "output is {}" "output: $SNAP_OUT"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

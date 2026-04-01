@@ -67,7 +67,7 @@ func Install() error {
 	}
 
 	// Extract hook scripts
-	scripts := []string{"status-line.sh", "task-hook.sh"}
+	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh"}
 	for _, name := range scripts {
 		data, err := HookFiles.ReadFile("hooks/" + name)
 		if err != nil {
@@ -119,15 +119,22 @@ func Install() error {
 	}
 
 	taskHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "task-hook.sh"))
+	snapshotHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "snapshot-hook.sh"))
 
-	// PostToolUse hook for TodoWrite
+	// PostToolUse hook for TodoWrite (task tracking)
 	postToolHook := hookEntry{
 		Matcher: "TodoWrite",
 		Hooks:   []hookAction{{Type: "command", Command: taskHookCmd}},
 	}
 	postToolJSON, _ := json.Marshal(postToolHook)
-
 	existingHooks["PostToolUse"] = appendIfNotPresent(existingHooks["PostToolUse"], postToolJSON, taskHookCmd)
+
+	// PostToolUse hook for all tools (snapshot from native session data)
+	snapshotHook := hookEntry{
+		Hooks: []hookAction{{Type: "command", Command: snapshotHookCmd}},
+	}
+	snapshotJSON, _ := json.Marshal(snapshotHook)
+	existingHooks["PostToolUse"] = appendIfNotPresent(existingHooks["PostToolUse"], snapshotJSON, snapshotHookCmd)
 
 	hooksJSON, _ := json.Marshal(existingHooks)
 	settings["hooks"] = json.RawMessage(hooksJSON)
@@ -294,7 +301,7 @@ func removeClaudeSetup(home, hooksDir string) error {
 		}
 	}
 
-	for _, name := range []string{"status-line.sh", "task-hook.sh"} {
+	for _, name := range []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh"} {
 		path := filepath.Join(hooksDir, name)
 		if err := os.Remove(path); err == nil {
 			fmt.Printf("  Removed %s\n", path)
