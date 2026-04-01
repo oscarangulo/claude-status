@@ -38,7 +38,7 @@ Claude Code doesn't tell you what you're spending *while* you're spending it. Yo
 ## Install in 30 seconds
 
 ```bash
-brew install oscarangulo/claude-status/claude-status
+brew install claude-status
 claude-status budget 20
 ```
 
@@ -251,7 +251,7 @@ Three hooks handle everything:
 ### Option 1: Homebrew (recommended)
 
 ```bash
-brew install oscarangulo/claude-status/claude-status
+brew install claude-status
 ```
 
 Hooks configure automatically. Just restart Claude Code.
@@ -341,10 +341,6 @@ It uses your historical average cost per completed task. After 10+ tasks, estima
 `claude-status uninstall` gives you options: remove hooks only, hooks + data, or everything.
 
 ---
-
-## VS Code Extension
-
-Want cost info in your IDE status bar too? See **[claude-status-vs-extension](https://github.com/oscarangulo/claude-status-vs-extension)**.
 
 ## Contributing
 
