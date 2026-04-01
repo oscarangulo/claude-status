@@ -58,10 +58,24 @@ Restart Claude Code. Done. You're protected.
 | Use Opus for simple file reads at $5/M tokens | Suggestion: *"Use Sonnet for reads, save 70%"* |
 | Realize at end of day you spent $60 | Daily/weekly reports with per-session breakdown |
 | Each session costs differently, no pattern visibility | Alert when a session costs 2x your average |
+| Start a plan with no idea what it'll cost | Estimate before you build: *"5 tasks × $2.88 = ~$14.40"* |
 
 ---
 
-## 9 Alerts That Save You Money
+## Works Everywhere
+
+claude-status uses Claude Code's `PostToolUse` hooks — part of the core engine, not the IDE. This means alerts work identically in:
+
+- **Claude Code CLI** (terminal)
+- **VS Code** (Claude Code extension)
+- **Cursor**
+- **JetBrains** (IntelliJ, WebStorm, etc.)
+
+If Claude Code runs there, claude-status works there. No extra setup per IDE.
+
+---
+
+## 10 Smart Alerts + Plan Cost Estimation
 
 Every alert appears **inside your conversation** as a system reminder. Claude sees it too and can react.
 
@@ -119,6 +133,18 @@ Spending $0.50+ per minute? Something's off.
 Context is high and you haven't done anything for 10 minutes? Start fresh.
 
 > `Context at 75% with 15min idle. Consider starting a new session to save tokens.`
+
+### Plan Cost Estimation
+
+When Claude creates a plan (3+ tasks), you get an instant cost estimate before any work begins:
+
+> `Plan estimate: 5 tasks × $2.88 avg = ~$14.40. Budget remaining: $25.60. This plan fits within your daily limit.`
+
+Or if it's going to blow your budget:
+
+> `Plan estimate: 8 tasks × $2.88 avg = ~$23.04. WARNING: This may exceed your remaining budget ($15.00). Consider splitting into phases or using Sonnet.`
+
+The estimate is based on your historical average cost per completed task. The more tasks you complete, the more accurate it gets.
 
 ---
 
