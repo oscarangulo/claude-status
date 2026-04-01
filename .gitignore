@@ -3,8 +3,3 @@ dist/
 /claude-status
 *.exe
 .DS_Store
-
-# VS Code extension
-vscode-extension/out/
-vscode-extension/node_modules/
-vscode-extension/*.vsix

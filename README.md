@@ -8,8 +8,6 @@
     Know exactly where your tokens go. Track costs per task. Save money with cache insights.
   </p>
   <p align="center">
-    <a href="https://marketplace.visualstudio.com/items?itemName=OscarAngulo.claude-status"><img src="https://img.shields.io/visual-studio-marketplace/v/OscarAngulo.claude-status?label=VS%20Code%20Marketplace" alt="VS Code Marketplace"></a>
-    <a href="https://marketplace.visualstudio.com/items?itemName=OscarAngulo.claude-status"><img src="https://img.shields.io/visual-studio-marketplace/i/OscarAngulo.claude-status?label=installs" alt="Installs"></a>
     <a href="https://github.com/oscarangulo/claude-status/releases"><img src="https://img.shields.io/github/v/release/oscarangulo/claude-status" alt="Release"></a>
     <a href="https://github.com/oscarangulo/claude-status/actions"><img src="https://github.com/oscarangulo/claude-status/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/oscarangulo/claude-status" alt="License"></a>
@@ -18,7 +16,6 @@
     <a href="#installation">Install</a> ·
     <a href="#what-it-shows">Features</a> ·
     <a href="#how-costs-are-calculated">Pricing</a> ·
-    <a href="#vs-code--cursor-extension">IDE Extension</a> ·
     <a href="#contributing">Contribute</a>
   </p>
 </p>
@@ -315,28 +312,11 @@ Each session file contains:
 
 ## VS Code / Cursor Extension
 
-<a href="https://marketplace.visualstudio.com/items?itemName=OscarAngulo.claude-status"><img src="https://img.shields.io/visual-studio-marketplace/v/OscarAngulo.claude-status?label=VS%20Code%20Marketplace&logo=visual-studio-code" alt="VS Code Marketplace"></a>
-
 See your Claude Code costs directly in your IDE status bar — no terminal needed.
 
-**Install from Marketplace:**
-```bash
-# VS Code
-ext install OscarAngulo.claude-status
+The VS Code extension lives in a separate repo: **[claude-status-vs-extension](https://github.com/oscarangulo/claude-status-vs-extension)**
 
-# Or search "Claude Status Monitor" in the Extensions tab
-```
-
-Or install directly: **[Claude Status Monitor on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=OscarAngulo.claude-status)**
-
-**What you get:**
-- **Status bar line 1:** cost, tokens (in/out), burn rate, duration, lines changed
-- **Status bar line 2:** context %, cache hit rate, savings, current task
-- **Click** for a detailed breakdown panel with per-task costs
-- **Hover** for a rich tooltip with full metrics
-- Auto-updates every 5 seconds via file watcher
-
-Works with **VS Code**, **Cursor**, and **VS Code Insiders**. Marketplace setup installs the `claude-status` CLI into `~/.local/bin` when needed and the extension reads both `~/.claude-status/sessions/` and Claude Code's native `~/.claude/projects/**/*.jsonl`, so existing sessions and new sessions both appear automatically.
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=OscarAngulo.claude-status) or search "Claude Status Monitor" in the Extensions tab.
 
 ## Optimization tips (TUI)
 
@@ -355,7 +335,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Areas where help is welcome:
 - Windows testing ([#3](https://github.com/oscarangulo/claude-status/issues/3))
 - Per-subagent cost tracking ([#4](https://github.com/oscarangulo/claude-status/issues/4))
 - Budget alerts ([#5](https://github.com/oscarangulo/claude-status/issues/5))
-- Publish extension to VS Code Marketplace
 
 ## License
 

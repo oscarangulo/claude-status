@@ -26,6 +26,10 @@ jobs:
       - name: Test
         run: go test -v ./...
 
+      - name: Hook integration tests
+        if: runner.os != 'Windows'
+        run: bash cmd/claude-status/hooks/hooks_test.sh
+
   lint:
     runs-on: ubuntu-latest
     steps:

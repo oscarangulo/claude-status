@@ -4,13 +4,18 @@ VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION)"
 INSTALL_DIR=$(HOME)/.local/bin
 
-.PHONY: build test clean install uninstall run
+.PHONY: build test test-hooks clean install uninstall run
 
 build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/claude-status/
 
 test:
 	go test ./...
+
+test-hooks:
+	bash cmd/claude-status/hooks/hooks_test.sh
+
+test-all: test test-hooks
 
 clean:
 	rm -rf $(BUILD_DIR)
