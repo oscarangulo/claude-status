@@ -327,46 +327,26 @@ fi
 # pulse-hook.sh tests
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== pulse tests ==="
+echo "=== pulse-hook.sh ==="
 
-# Test pulse-hook.sh (Stop event — counter only)
 PULSE_DIR="$TMPDIR/pulse-test"
 mkdir -p "$PULSE_DIR/sessions"
-echo "5" > "$PULSE_DIR/pulse-pulse-sess"
-PULSE_COUNTER_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
-if [ "$PULSE_COUNTER_OUT" = "{}" ]; then
-  pass "pulse-hook increments counter silently"
-else
-  fail "pulse-hook increments counter silently" "output: $PULSE_COUNTER_OUT"
-fi
-COUNTER_VAL=$(cat "$PULSE_DIR/pulse-pulse-sess")
-if [ "$COUNTER_VAL" = "6" ]; then
-  pass "pulse counter incremented to 6"
-else
-  fail "pulse counter incremented to 6" "got: $COUNTER_VAL"
-fi
 
-# Test pulse in snapshot-hook (PostToolUse — actual output)
-PULSE_SNAP_DIR="$TMPDIR/pulse-snap-test"
-mkdir -p "$PULSE_SNAP_DIR/sessions"
+# Seed a snapshot so pulse-hook has data to read
+echo '{"type":"snapshot","timestamp":"2026-03-26T15:01:00Z","session_id":"pulse-sess","total_cost_usd":0.50,"total_input_tokens":20000,"total_output_tokens":5000,"cache_read_tokens":8000,"cache_write_tokens":3000,"context_used_pct":18,"context_window_size":1000000,"total_duration_ms":90000,"total_api_duration_ms":12000,"total_lines_added":45,"total_lines_removed":3,"model":"claude-opus-4-6"}' > "$PULSE_DIR/sessions/pulse-sess.jsonl"
 
-PULSE_NATIVE="$TMPDIR/.claude/projects/-test-project/pulse-snap-sess.jsonl"
-cat > "$PULSE_NATIVE" <<'NATIVE'
-{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"pulse-snap-sess"}
-{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":5000,"output_tokens":1000,"cache_read_input_tokens":2000,"cache_creation_input_tokens":500}},"timestamp":"2026-03-26T15:01:00.000Z","sessionId":"pulse-snap-sess"}
-NATIVE
-
-# Seed counter at 2 so next PostToolUse is #3 (triggers pulse)
-echo "2" > "$PULSE_SNAP_DIR/pulse-pulse-snap-sess"
 # Seed stats
-echo '{"tools":{"Bash":5,"Read":3,"Edit":2},"errors":1,"total_calls":10,"compactions":1}' > "$PULSE_SNAP_DIR/stats-pulse-snap-sess.json"
+echo '{"tools":{"Bash":5,"Read":3,"Edit":2},"errors":1,"total_calls":10,"compactions":1}' > "$PULSE_DIR/stats-pulse-sess.json"
 
-PULSE_OUT=$(echo '{"session_id":"pulse-snap-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_SNAP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+# Seed counter at 2 so next call is #3 (triggers pulse)
+echo "2" > "$PULSE_DIR/pulse-pulse-sess"
+
+PULSE_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
 
 if echo "$PULSE_OUT" | grep -q "tokens"; then
-  pass "pulse fires via snapshot-hook"
+  pass "pulse fires on 3rd call"
 else
-  fail "pulse fires via snapshot-hook" "output: $PULSE_OUT"
+  fail "pulse fires on 3rd call" "output: $PULSE_OUT"
 fi
 
 if echo "$PULSE_OUT" | grep -q "ctx"; then
@@ -400,11 +380,21 @@ else
 fi
 
 # Test: pulse does NOT fire on 4th call
-PULSE_OUT2=$(echo '{"session_id":"pulse-snap-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_SNAP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
-if echo "$PULSE_OUT2" | grep -q "tokens"; then
-  fail "no pulse on non-multiple call" "output: $PULSE_OUT2"
-else
+PULSE_OUT2=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
+if [ "$PULSE_OUT2" = "{}" ]; then
   pass "no pulse on non-multiple call"
+else
+  fail "no pulse on non-multiple call" "output: $PULSE_OUT2"
+fi
+
+# Test: API mode shows cost
+echo '{"plan":"api"}' > "$PULSE_DIR/budget.json"
+echo "5" > "$PULSE_DIR/pulse-pulse-sess"
+PULSE_API=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
+if echo "$PULSE_API" | grep -q "Session:.*spent"; then
+  pass "API mode shows cost"
+else
+  fail "API mode shows cost" "output: $PULSE_API"
 fi
 
 # ---------------------------------------------------------------------------
