@@ -80,6 +80,84 @@ emit_task_event() {
     }' >> "$LOG_FILE"
 }
 
+# --- Plan cost estimation ---
+# Computes average cost per task from completed tasks across all sessions.
+# Returns the estimate via additionalContext when a new plan is created.
+compute_plan_estimate() {
+  local num_tasks="$1"
+  local alerts=""
+
+  # Gather completed task pairs (started + completed) to compute avg cost
+  AVG_TASK_COST=0
+  COMPLETED_TASKS=0
+
+  for sf in "$SESSION_DIR"/*.jsonl; do
+    [ -f "$sf" ] || continue
+    # Find task_completed events that have cost data
+    while IFS= read -r line; do
+      TASK_KEY_C=$(echo "$line" | jq -r '.task_key // ""')
+      END_COST=$(echo "$line" | jq -r '.cost_snapshot_usd // 0')
+
+      # Find matching task_started for this task_key
+      START_LINE=$(grep "\"event\":\"task_started\"" "$sf" 2>/dev/null | grep "\"task_key\":\"$TASK_KEY_C\"" | tail -1 || echo "")
+      if [ -n "$START_LINE" ]; then
+        START_COST=$(echo "$START_LINE" | jq -r '.cost_snapshot_usd // 0')
+        DELTA=$(echo "scale=4; $END_COST - $START_COST" | bc 2>/dev/null || echo "0")
+        if [ "$(echo "$DELTA > 0" | bc 2>/dev/null)" = "1" ]; then
+          AVG_TASK_COST=$(echo "scale=4; $AVG_TASK_COST + $DELTA" | bc 2>/dev/null)
+          COMPLETED_TASKS=$((COMPLETED_TASKS + 1))
+        fi
+      fi
+    done < <(grep '"event":"task_completed"' "$sf" 2>/dev/null || true)
+  done
+
+  if [ "$COMPLETED_TASKS" -ge 2 ]; then
+    AVG_PER_TASK=$(echo "scale=4; $AVG_TASK_COST / $COMPLETED_TASKS" | bc 2>/dev/null || echo "0")
+    ESTIMATED_TOTAL=$(echo "scale=2; $AVG_PER_TASK * $num_tasks" | bc 2>/dev/null || echo "0")
+    AVG_DISPLAY=$(printf '%.2f' "$AVG_PER_TASK")
+    EST_DISPLAY=$(printf '%.2f' "$ESTIMATED_TOTAL")
+
+    alerts="Plan estimate: ${num_tasks} tasks x \$${AVG_DISPLAY} avg = ~\$${EST_DISPLAY}."
+
+    # Check against budget
+    BUDGET_FILE="$DATA_DIR/budget.json"
+    if [ -f "$BUDGET_FILE" ]; then
+      DAILY_LIMIT=$(jq -r '.daily_limit // 0' "$BUDGET_FILE" 2>/dev/null)
+      if [ "$(echo "$DAILY_LIMIT > 0" | bc 2>/dev/null)" = "1" ]; then
+        # Get today's total spend across all sessions
+        TODAY=$(date -u +"%Y-%m-%d")
+        TODAY_SPEND=0
+        for sf in "$SESSION_DIR"/*.jsonl; do
+          [ -f "$sf" ] || continue
+          LAST_SNAP=$(grep '"type":"snapshot"' "$sf" 2>/dev/null | tail -1 || echo "")
+          if [ -n "$LAST_SNAP" ]; then
+            SNAP_DATE=$(echo "$LAST_SNAP" | jq -r '.timestamp // ""' | cut -c1-10)
+            if [ "$SNAP_DATE" = "$TODAY" ]; then
+              SNAP_COST=$(echo "$LAST_SNAP" | jq -r '.total_cost_usd // 0')
+              TODAY_SPEND=$(echo "scale=4; $TODAY_SPEND + $SNAP_COST" | bc 2>/dev/null)
+            fi
+          fi
+        done
+
+        REMAINING=$(echo "scale=2; $DAILY_LIMIT - $TODAY_SPEND" | bc 2>/dev/null || echo "0")
+        REM_DISPLAY=$(printf '%.2f' "$REMAINING")
+
+        if [ "$(echo "$ESTIMATED_TOTAL > $REMAINING" | bc 2>/dev/null)" = "1" ]; then
+          alerts="${alerts} WARNING: This may exceed your remaining budget (\$${REM_DISPLAY}). Consider splitting into phases or using Sonnet."
+        else
+          alerts="${alerts} Budget remaining: \$${REM_DISPLAY}. This plan fits within your daily limit."
+        fi
+      fi
+    fi
+  else
+    alerts="Plan created: ${num_tasks} tasks. Not enough task history to estimate cost (need 2+ completed tasks)."
+  fi
+
+  echo "$alerts"
+}
+
+PLAN_ALERT=""
+
 case "$HOOK_EVENT" in
     "PostToolUse")
         if [ "$TOOL_NAME" = "TodoWrite" ]; then
@@ -89,6 +167,23 @@ case "$HOOK_EVENT" in
             if [ "$NUM_TODOS" -eq 0 ]; then
                 echo "{}"
                 exit 0
+            fi
+
+            # Detect new plan: count pending/in_progress tasks that are NEW (no prior events)
+            NEW_PLAN_TASKS=0
+            for i in $(seq 0 $((NUM_TODOS - 1))); do
+                TASK_CONTENT=$(echo "$TODOS" | jq -r ".[$i].content // \"\"")
+                TASK_STATUS=$(echo "$TODOS" | jq -r ".[$i].status // \"pending\"")
+                TASK_KEY="task-$(hash_string "$TASK_CONTENT")"
+                EXISTING=$(grep "\"task_key\":\"$TASK_KEY\"" "$LOG_FILE" 2>/dev/null | tail -1 || echo "")
+                if [ -z "$EXISTING" ] && [ "$TASK_STATUS" != "completed" ]; then
+                    NEW_PLAN_TASKS=$((NEW_PLAN_TASKS + 1))
+                fi
+            done
+
+            # If 3+ new tasks, this is a new plan — estimate cost
+            if [ "$NEW_PLAN_TASKS" -ge 3 ]; then
+                PLAN_ALERT=$(compute_plan_estimate "$NEW_PLAN_TASKS")
             fi
 
             for i in $(seq 0 $((NUM_TODOS - 1))); do
@@ -128,4 +223,11 @@ case "$HOOK_EVENT" in
         ;;
 esac
 
-echo "{}"
+# Output: if we have a plan estimate, send it as additionalContext
+if [ -n "$PLAN_ALERT" ]; then
+    jq -cn \
+      --arg ctx "[claude-status] $PLAN_ALERT" \
+      '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
+else
+    echo "{}"
+fi

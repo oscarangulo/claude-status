@@ -173,6 +173,72 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# task-hook.sh — plan estimate tests
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== task-hook.sh — plan estimate ==="
+
+EST_DIR="$TMPDIR/est-test"
+mkdir -p "$EST_DIR/sessions"
+
+# Seed historical completed tasks in a past session (need 2+ for avg)
+cat > "$EST_DIR/sessions/past-sess.jsonl" <<'HIST'
+{"type":"snapshot","timestamp":"2026-03-25T15:00:00Z","session_id":"past-sess","total_cost_usd":5.00}
+{"type":"task_event","timestamp":"2026-03-25T15:01:00Z","session_id":"past-sess","event":"task_started","task_id":"t1","task_key":"task-aaa","task_subject":"Task A","task_status":"in_progress","cost_snapshot_usd":1.00,"token_snapshot":1000}
+{"type":"task_event","timestamp":"2026-03-25T15:10:00Z","session_id":"past-sess","event":"task_completed","task_id":"t1","task_key":"task-aaa","task_subject":"Task A","task_status":"completed","cost_snapshot_usd":3.00,"token_snapshot":3000}
+{"type":"task_event","timestamp":"2026-03-25T15:11:00Z","session_id":"past-sess","event":"task_started","task_id":"t2","task_key":"task-bbb","task_subject":"Task B","task_status":"in_progress","cost_snapshot_usd":3.00,"token_snapshot":3000}
+{"type":"task_event","timestamp":"2026-03-25T15:20:00Z","session_id":"past-sess","event":"task_completed","task_id":"t2","task_key":"task-bbb","task_subject":"Task B","task_status":"completed","cost_snapshot_usd":5.00,"token_snapshot":5000}
+HIST
+# Task A cost $2.00, Task B cost $2.00 → avg = $2.00
+
+# Seed a snapshot for the current session
+echo '{"type":"snapshot","timestamp":"2026-03-26T15:00:00Z","session_id":"est-sess","total_cost_usd":0.10}' > "$EST_DIR/sessions/est-sess.jsonl"
+
+# Create a new plan with 4 tasks
+EST_PLAN='{"session_id":"est-sess","hook_event_name":"PostToolUse","tool_name":"TodoWrite","tool_input":{"todos":[{"content":"Implement auth","status":"pending"},{"content":"Add tests","status":"pending"},{"content":"Write docs","status":"pending"},{"content":"Deploy","status":"pending"}]}}'
+
+EST_OUT=$(echo "$EST_PLAN" | CLAUDE_STATUS_DIR="$EST_DIR" bash "$SCRIPT_DIR/task-hook.sh" 2>&1)
+
+# Test 1: plan estimate appears in output
+if echo "$EST_OUT" | grep -q "Plan estimate"; then
+  pass "plan estimate in output"
+else
+  fail "plan estimate in output" "output: $EST_OUT"
+fi
+
+# Test 2: output contains task count
+if echo "$EST_OUT" | grep -q "4 tasks"; then
+  pass "plan estimate has task count"
+else
+  fail "plan estimate has task count" "output: $EST_OUT"
+fi
+
+# Test 3: output is valid JSON with additionalContext
+if echo "$EST_OUT" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null 2>&1; then
+  pass "plan estimate uses additionalContext"
+else
+  fail "plan estimate uses additionalContext" "output: $EST_OUT"
+fi
+
+# Test 4: plan with budget — seed budget and check remaining message
+echo '{"daily_limit":10.00}' > "$EST_DIR/budget.json"
+EST_OUT2=$(echo "$EST_PLAN" | CLAUDE_STATUS_DIR="$EST_DIR" bash "$SCRIPT_DIR/task-hook.sh" 2>&1)
+if echo "$EST_OUT2" | grep -q "budget\|Budget\|remaining\|limit"; then
+  pass "plan estimate includes budget info"
+else
+  fail "plan estimate includes budget info" "output: $EST_OUT2"
+fi
+
+# Test 5: small update (< 3 new tasks) should NOT trigger estimate
+SMALL_UPDATE='{"session_id":"est-sess","hook_event_name":"PostToolUse","tool_name":"TodoWrite","tool_input":{"todos":[{"content":"Implement auth","status":"in_progress"},{"content":"Add tests","status":"pending"}]}}'
+SMALL_OUT=$(echo "$SMALL_UPDATE" | CLAUDE_STATUS_DIR="$EST_DIR" bash "$SCRIPT_DIR/task-hook.sh" 2>&1)
+if echo "$SMALL_OUT" | grep -q "Plan estimate"; then
+  fail "no estimate on small update" "estimate fired for < 3 tasks"
+else
+  pass "no estimate on small update"
+fi
+
+# ---------------------------------------------------------------------------
 # snapshot-hook.sh tests
 # ---------------------------------------------------------------------------
 echo ""
