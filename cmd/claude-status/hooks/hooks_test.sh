@@ -456,6 +456,103 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# subagent-hook.sh tests
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== subagent-hook.sh ==="
+
+SA_DIR="$TMPDIR/sa-test"
+mkdir -p "$SA_DIR/sessions"
+
+# Create a mock subagent transcript
+SA_TRANSCRIPT="$TMPDIR/subagent-transcript.jsonl"
+cat > "$SA_TRANSCRIPT" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"find files"},"timestamp":"2026-03-26T15:00:00.000Z"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-sonnet-4-6","usage":{"input_tokens":5000,"output_tokens":1000,"cache_read_input_tokens":2000,"cache_creation_input_tokens":500}},"timestamp":"2026-03-26T15:00:03.000Z"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-sonnet-4-6","usage":{"input_tokens":3000,"output_tokens":800,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}},"timestamp":"2026-03-26T15:00:06.000Z"}
+NATIVE
+
+SA_INPUT=$(jq -cn \
+  --arg sid "sa-sess" \
+  --arg agent_id "agent-abc123" \
+  --arg agent_type "Explore" \
+  --arg transcript "$SA_TRANSCRIPT" \
+  '{session_id: $sid, hook_event_name: "SubagentStop", agent_id: $agent_id, agent_type: $agent_type, agent_transcript_path: $transcript}')
+
+# Test 1: exits 0
+SA_OUT=$(echo "$SA_INPUT" | CLAUDE_STATUS_DIR="$SA_DIR" bash "$SCRIPT_DIR/subagent-hook.sh" 2>&1) && pass "exits 0" || fail "exits 0" "non-zero exit"
+
+# Test 2: writes subagent_event to JSONL
+SA_JSONL="$SA_DIR/sessions/sa-sess.jsonl"
+if [ -f "$SA_JSONL" ] && grep -q '"type":"subagent_event"' "$SA_JSONL"; then
+  pass "writes subagent_event"
+else
+  fail "writes subagent_event" "no event in file"
+fi
+
+# Test 3: agent_type is captured
+SA_TYPE=$(grep '"type":"subagent_event"' "$SA_JSONL" | jq -r '.agent_type')
+if [ "$SA_TYPE" = "Explore" ]; then
+  pass "agent_type captured"
+else
+  fail "agent_type captured" "got: $SA_TYPE"
+fi
+
+# Test 4: cost is computed (should be > 0)
+SA_COST=$(grep '"type":"subagent_event"' "$SA_JSONL" | jq -r '.cost_usd')
+if [ "$(echo "$SA_COST > 0" | bc)" = "1" ]; then
+  pass "cost computed from transcript"
+else
+  fail "cost computed from transcript" "got: $SA_COST"
+fi
+
+# Test 5: model is detected
+SA_MODEL=$(grep '"type":"subagent_event"' "$SA_JSONL" | jq -r '.model')
+if echo "$SA_MODEL" | grep -qi "sonnet"; then
+  pass "model detected from transcript"
+else
+  fail "model detected from transcript" "got: $SA_MODEL"
+fi
+
+# Test 6: output is {} for normal cost
+if [ "$SA_OUT" = "{}" ]; then
+  pass "no alert for normal cost"
+else
+  fail "no alert for normal cost" "output: $SA_OUT"
+fi
+
+# Test 7: alert fires for expensive subagent (> $2)
+EXPENSIVE_TRANSCRIPT="$TMPDIR/expensive-transcript.jsonl"
+cat > "$EXPENSIVE_TRANSCRIPT" <<'NATIVE'
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":200000,"output_tokens":50000,"cache_read_input_tokens":100000,"cache_creation_input_tokens":30000}},"timestamp":"2026-03-26T15:00:05.000Z"}
+NATIVE
+
+EXPENSIVE_INPUT=$(jq -cn \
+  --arg sid "sa-sess" \
+  --arg agent_id "agent-expensive" \
+  --arg agent_type "Plan" \
+  --arg transcript "$EXPENSIVE_TRANSCRIPT" \
+  '{session_id: $sid, hook_event_name: "SubagentStop", agent_id: $agent_id, agent_type: $agent_type, agent_transcript_path: $transcript}')
+
+EXPENSIVE_OUT=$(echo "$EXPENSIVE_INPUT" | CLAUDE_STATUS_DIR="$SA_DIR" bash "$SCRIPT_DIR/subagent-hook.sh" 2>&1)
+if echo "$EXPENSIVE_OUT" | grep -q "Expensive subagent"; then
+  pass "alert fires for expensive subagent"
+else
+  fail "alert fires for expensive subagent" "output: $EXPENSIVE_OUT"
+fi
+
+# Test 8: graceful with missing transcript
+NO_TRANSCRIPT_INPUT=$(jq -cn \
+  --arg sid "sa-sess2" \
+  --arg agent_id "agent-none" \
+  --arg agent_type "Explore" \
+  '{session_id: $sid, hook_event_name: "SubagentStop", agent_id: $agent_id, agent_type: $agent_type, agent_transcript_path: "/nonexistent/path.jsonl"}')
+
+SA_DIR2="$TMPDIR/sa-test2"
+mkdir -p "$SA_DIR2/sessions"
+NO_OUT=$(echo "$NO_TRANSCRIPT_INPUT" | CLAUDE_STATUS_DIR="$SA_DIR2" bash "$SCRIPT_DIR/subagent-hook.sh" 2>&1) && pass "graceful with missing transcript" || fail "graceful with missing transcript" "non-zero exit"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

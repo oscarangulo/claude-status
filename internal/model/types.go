@@ -51,13 +51,27 @@ type TaskCost struct {
 	Percentage  float64 // percentage of total session cost
 }
 
+// SubagentEvent records the cost of a single subagent execution.
+type SubagentEvent struct {
+	Timestamp   time.Time `json:"timestamp"`
+	SessionID   string    `json:"session_id"`
+	Type        string    `json:"type"` // "subagent_event"
+	AgentID     string    `json:"agent_id"`
+	AgentType   string    `json:"agent_type"`
+	CostUSD     float64   `json:"cost_usd"`
+	InputTokens int64     `json:"input_tokens"`
+	OutputTokens int64    `json:"output_tokens"`
+	Model       string    `json:"model"`
+}
+
 // Session aggregates all data for a single Claude Code session.
 type Session struct {
-	ID         string
-	StartedAt  time.Time
-	Snapshots  []Snapshot
-	TaskEvents []TaskEvent
-	Latest     *Snapshot
+	ID             string
+	StartedAt      time.Time
+	Snapshots      []Snapshot
+	TaskEvents     []TaskEvent
+	SubagentEvents []SubagentEvent
+	Latest         *Snapshot
 }
 
 // SessionSummary provides high-level metrics for a session.

@@ -59,6 +59,7 @@ Restart Claude Code. Done.
 | **Expensive session** | No pattern visibility across sessions | Alert when a session costs 2x your average |
 | **Blind planning** | Start a 10-task plan with no cost idea | Estimate upfront: "10 tasks x $2.88 = ~$28.80" |
 | **High burn rate** | Spending $0.50+/min without noticing | Alert to slow down and break work into pieces |
+| **Expensive subagents** | No idea which agent cost how much | Per-agent cost breakdown: Explore $0.45, Plan $0.45 |
 | **Stale context** | High context + idle = wasted tokens on restart | Prompt to start a fresh session |
 
 ---
@@ -147,6 +148,21 @@ When Claude creates a plan with 3+ tasks, you get an instant cost estimate based
 
 Accuracy improves as you complete more tasks. Needs 2+ completed tasks for the first estimate.
 
+### 9. Subagent cost tracking
+
+When Claude spawns subagents (Explore, Plan, general-purpose), each one's cost is tracked individually. See exactly where your tokens go.
+
+> `Expensive subagent: Explore cost $3.45. Consider using Sonnet for this type of work.`
+
+The TUI dashboard shows a breakdown:
+
+```
+Subagents (3)  Total: $1.2300
+  ▸ Explore    $0.4500  Sonnet
+  ▸ Explore    $0.3300  Sonnet
+  ▸ Plan       $0.4500  Opus
+```
+
 ---
 
 ## Spending reports
@@ -209,7 +225,7 @@ Claude Code tool call
 snapshot-hook.sh runs (< 50ms)
        |
        v
-Reads native session data, computes cost, checks 8 alert conditions
+Reads native session data, computes cost, checks 9 alert conditions
        |
        v
 Threshold crossed?  -->  Alert injected into conversation
@@ -224,7 +240,8 @@ Three hooks handle everything:
 |------|------|
 | **snapshot-hook.sh** | Reads session data, computes cost, runs all alert checks, outputs warnings |
 | **task-hook.sh** | Tracks per-task cost and estimates plan cost when using TodoWrite |
-| **status-line.sh** | Rich status bar with cost, tokens, context, and current task |
+| **subagent-hook.sh** | Calculates per-subagent cost from transcript on SubagentStop |
+| **status-line.sh** | Rich status bar with cost, tokens, context, current task, and subagent count |
 
 ---
 

@@ -76,7 +76,7 @@ func InstallWithOptions(opts InstallOptions) error {
 	}
 
 	// Extract hook scripts
-	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh"}
+	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh"}
 	for _, name := range scripts {
 		data, err := HookFiles.ReadFile("hooks/" + name)
 		if err != nil {
@@ -129,6 +129,7 @@ func InstallWithOptions(opts InstallOptions) error {
 
 	taskHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "task-hook.sh"))
 	snapshotHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "snapshot-hook.sh"))
+	subagentHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "subagent-hook.sh"))
 
 	// PostToolUse hook for TodoWrite (task tracking)
 	postToolHook := hookEntry{
@@ -144,6 +145,13 @@ func InstallWithOptions(opts InstallOptions) error {
 	}
 	snapshotJSON, _ := json.Marshal(snapshotHook)
 	existingHooks["PostToolUse"] = appendIfNotPresent(existingHooks["PostToolUse"], snapshotJSON, snapshotHookCmd)
+
+	// SubagentStop hook (per-subagent cost tracking)
+	subagentHook := hookEntry{
+		Hooks: []hookAction{{Type: "command", Command: subagentHookCmd}},
+	}
+	subagentJSON, _ := json.Marshal(subagentHook)
+	existingHooks["SubagentStop"] = appendIfNotPresent(existingHooks["SubagentStop"], subagentJSON, subagentHookCmd)
 
 	hooksJSON, _ := json.Marshal(existingHooks)
 	settings["hooks"] = json.RawMessage(hooksJSON)
@@ -318,7 +326,7 @@ func removeClaudeSetup(home, hooksDir string) error {
 		}
 	}
 
-	for _, name := range []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh"} {
+	for _, name := range []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh"} {
 		path := filepath.Join(hooksDir, name)
 		if err := os.Remove(path); err == nil {
 			fmt.Printf("  Removed %s\n", path)

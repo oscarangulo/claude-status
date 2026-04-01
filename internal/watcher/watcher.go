@@ -110,7 +110,7 @@ func (w *Watcher) processFile(path string) {
 	}
 	defer f.Close()
 
-	snaps, events, newOffset, err := model.ParseNewLines(f, offset)
+	snaps, events, _, newOffset, err := model.ParseNewLines(f, offset)
 	if err != nil {
 		return
 	}

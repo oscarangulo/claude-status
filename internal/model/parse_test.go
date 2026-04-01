@@ -82,7 +82,7 @@ func TestParseNewLines(t *testing.T) {
 `
 	r := strings.NewReader(content)
 
-	snaps, events, offset, err := ParseNewLines(r, 0)
+	snaps, events, _, offset, err := ParseNewLines(r, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestParseNewLines(t *testing.T) {
 
 	// Read again from offset — should get nothing
 	r = strings.NewReader(content)
-	snaps2, events2, _, err := ParseNewLines(r, offset)
+	snaps2, events2, _, _, err := ParseNewLines(r, offset)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

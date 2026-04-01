@@ -54,6 +54,12 @@ func ParseSessionFile(path string) (*Session, error) {
 				continue
 			}
 			session.TaskEvents = append(session.TaskEvents, evt)
+		case "subagent_event":
+			var evt SubagentEvent
+			if err := json.Unmarshal(line, &evt); err != nil {
+				continue
+			}
+			session.SubagentEvents = append(session.SubagentEvents, evt)
 		}
 	}
 
@@ -61,13 +67,14 @@ func ParseSessionFile(path string) (*Session, error) {
 }
 
 // ParseNewLines reads JSONL entries starting from a byte offset. Returns parsed data and the new offset.
-func ParseNewLines(r io.ReadSeeker, offset int64) ([]Snapshot, []TaskEvent, int64, error) {
+func ParseNewLines(r io.ReadSeeker, offset int64) ([]Snapshot, []TaskEvent, []SubagentEvent, int64, error) {
 	if _, err := r.Seek(offset, io.SeekStart); err != nil {
-		return nil, nil, offset, err
+		return nil, nil, nil, offset, err
 	}
 
 	var snapshots []Snapshot
 	var events []TaskEvent
+	var subagents []SubagentEvent
 
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 64*1024)
@@ -101,8 +108,14 @@ func ParseNewLines(r io.ReadSeeker, offset int64) ([]Snapshot, []TaskEvent, int6
 				continue
 			}
 			events = append(events, evt)
+		case "subagent_event":
+			var evt SubagentEvent
+			if err := json.Unmarshal(line, &evt); err != nil {
+				continue
+			}
+			subagents = append(subagents, evt)
 		}
 	}
 
-	return snapshots, events, bytesRead, scanner.Err()
+	return snapshots, events, subagents, bytesRead, scanner.Err()
 }

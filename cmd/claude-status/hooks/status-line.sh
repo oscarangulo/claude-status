@@ -252,8 +252,18 @@ echo
 printf "%b" "Memory [${CTX_BAR}] ${BAR_COLOR}${CTX_PCT}%${RST}${CTX_WARN} ${DIM}|${RST} ${CACHE_COLOR}${CACHE_HIT}% reused from cache${RST}${SAVINGS_DISPLAY}"
 echo
 
-# --- Line 3: Current task (if any) ---
-if [ -n "$TASK_LINE" ]; then
-  printf "%b" "$TASK_LINE"
+# --- Line 3: Current task + subagents ---
+AGENT_INFO=""
+if [ -f "$LOG_FILE" ]; then
+  AGENT_COUNT=$(grep -c '"type":"subagent_event"' "$LOG_FILE" 2>/dev/null || echo "0")
+  if [ "$AGENT_COUNT" -gt 0 ]; then
+    AGENT_COST=$(grep '"type":"subagent_event"' "$LOG_FILE" 2>/dev/null | jq -s '[.[].cost_usd] | add' 2>/dev/null || echo "0")
+    AGENT_COST_DISPLAY=$(printf "%.4f" "$AGENT_COST")
+    AGENT_INFO="${DIM}|${RST} ${CYAN}${AGENT_COUNT} agents (\$${AGENT_COST_DISPLAY})${RST}"
+  fi
+fi
+
+if [ -n "$TASK_LINE" ] || [ -n "$AGENT_INFO" ]; then
+  printf "%b" "${TASK_LINE:+$TASK_LINE }${AGENT_INFO}"
   echo
 fi

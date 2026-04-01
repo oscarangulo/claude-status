@@ -57,6 +57,13 @@ func renderDashboard(a *analyzer.Analyzer, width int) string {
 		b.WriteString("\n")
 	}
 
+	// Subagent table
+	if subagents := a.Session().SubagentEvents; len(subagents) > 0 {
+		subTable := renderSubagentTable(subagents, innerWidth)
+		b.WriteString(sectionStyle.Width(innerWidth).Render(subTable))
+		b.WriteString("\n")
+	}
+
 	// Tips
 	if len(tips) > 0 {
 		tipsSection := renderTips(tips, innerWidth)
@@ -192,6 +199,36 @@ func renderTaskTable(tasks []model.TaskCost, totalCost float64, width int) strin
 		row := fmt.Sprintf("  %s %s  %s  %s %s",
 			icon, nameStyle(fmt.Sprintf("%-*s", maxSubj, subject)),
 			costStyle.Render(cost), bar, labelStyle.Render(pct))
+		rows = append(rows, row)
+	}
+
+	return title + "\n" + strings.Join(rows, "\n")
+}
+
+func renderSubagentTable(events []model.SubagentEvent, width int) string {
+	title := titleStyle.Render("Subagents")
+
+	var totalCost float64
+	for _, e := range events {
+		totalCost += e.CostUSD
+	}
+
+	title += labelStyle.Render(fmt.Sprintf(" (%d)", len(events))) +
+		labelStyle.Render("  Total: ") + costStyle.Render(fmt.Sprintf("$%.4f", totalCost))
+
+	var rows []string
+	for _, e := range events {
+		agentType := e.AgentType
+		maxType := 15
+		if len(agentType) > maxType {
+			agentType = agentType[:maxType-3] + "..."
+		}
+
+		cost := costStyle.Render(fmt.Sprintf("$%.4f", e.CostUSD))
+		model := labelStyle.Render(e.Model)
+
+		row := fmt.Sprintf("  %s  %-*s  %s  %s",
+			valueStyle.Render("▸"), maxType, agentType, cost, model)
 		rows = append(rows, row)
 	}
 
