@@ -319,6 +319,95 @@ if [ "$NEW_CTX" -ge 70 ] && ! alert_sent "idle_ctx"; then
   fi
 fi
 
+# --- 8. PERIODIC PULSE ---
+# Reads shared counter (incremented by pulse-hook.sh on Stop + here on PostToolUse)
+PULSE_EVERY=3
+if [ -f "$BUDGET_FILE" ]; then
+  CONFIGURED_PULSE=$(jq -r '.pulse_every // 0' "$BUDGET_FILE" 2>/dev/null)
+  if [ "$CONFIGURED_PULSE" -gt 0 ] 2>/dev/null; then
+    PULSE_EVERY=$CONFIGURED_PULSE
+  fi
+fi
+
+PULSE_FILE="$DATA_DIR/pulse-${SESSION_ID}"
+PULSE_COUNT=0
+if [ -f "$PULSE_FILE" ]; then
+  PULSE_COUNT=$(cat "$PULSE_FILE" 2>/dev/null || echo "0")
+fi
+PULSE_COUNT=$((PULSE_COUNT + 1))
+echo "$PULSE_COUNT" > "$PULSE_FILE"
+
+if [ $(( PULSE_COUNT % PULSE_EVERY )) -eq 0 ]; then
+  DURATION_MIN=$(awk "BEGIN{d=$DURATION_MS/60000; printf \"%d\", (d > 0) ? d : 0}" 2>/dev/null)
+
+  if [ "$PLAN_MODE" = "pro" ]; then
+    # Pro mode: productivity pulse
+    TOTAL_TOKENS=$(echo "$SNAPSHOT" | jq -r '(.total_input_tokens // 0) + (.total_output_tokens // 0)')
+    TOKENS_DISPLAY=$(awk "BEGIN{t=$TOTAL_TOKENS; if(t>=1000000) printf \"%.1fM\",t/1000000; else if(t>=1000) printf \"%.0fK\",t/1000; else printf \"%d\",t}" 2>/dev/null)
+    LINES_A=$(echo "$SNAPSHOT" | jq -r '.total_lines_added // 0')
+    LINES_R=$(echo "$SNAPSHOT" | jq -r '.total_lines_removed // 0')
+    INPUT_TOK=$(echo "$SNAPSHOT" | jq -r '.total_input_tokens // 0')
+    CACHE_R=$(echo "$SNAPSHOT" | jq -r '.cache_read_tokens // 0')
+    CACHE_PCT=0
+    if [ "$INPUT_TOK" -gt 0 ] && [ "$CACHE_R" -gt 0 ]; then
+      CACHE_PCT=$(awk "BEGIN{printf \"%d\", $CACHE_R * 100 / $INPUT_TOK}" 2>/dev/null)
+    fi
+
+    PARTS="${TOKENS_DISPLAY} tokens, ${NEW_CTX}% ctx"
+    if [ "$CACHE_PCT" -gt 0 ]; then
+      PARTS="$PARTS, ${CACHE_PCT}% cache"
+    fi
+    if [ "$LINES_A" -gt 0 ] || [ "$LINES_R" -gt 0 ]; then
+      PARTS="$PARTS, +${LINES_A}/-${LINES_R} lines"
+    fi
+
+    # Read stats if available
+    STATS_FILE="$DATA_DIR/stats-${SESSION_ID}.json"
+    if [ -f "$STATS_FILE" ]; then
+      S_CALLS=$(jq -r '.total_calls // 0' "$STATS_FILE" 2>/dev/null)
+      S_ERRORS=$(jq -r '.errors // 0' "$STATS_FILE" 2>/dev/null)
+      S_COMPACT=$(jq -r '.compactions // 0' "$STATS_FILE" 2>/dev/null)
+      S_TOP=$(jq -r '.tools | to_entries | sort_by(-.value) | .[0:3] | map("\(.key):\(.value)") | join(" ")' "$STATS_FILE" 2>/dev/null || echo "")
+      if [ "$S_CALLS" -gt 0 ]; then
+        CALL_INFO="${S_CALLS} calls"
+        if [ "$S_ERRORS" -gt 0 ]; then
+          ERR_PCT=$(awk "BEGIN{printf \"%d\", $S_ERRORS * 100 / $S_CALLS}" 2>/dev/null)
+          CALL_INFO="$CALL_INFO (${ERR_PCT}% errors)"
+        fi
+        PARTS="$PARTS, $CALL_INFO"
+      fi
+      if [ -n "$S_TOP" ]; then
+        PARTS="$PARTS | top: $S_TOP"
+      fi
+      if [ "$S_COMPACT" -gt 0 ]; then
+        PARTS="$PARTS, ${S_COMPACT}x compacted"
+      fi
+    fi
+
+    TASK_COUNT=$(grep -c '"event":"task_completed"' "$LOG_FILE" 2>/dev/null || true)
+    TASK_COUNT=${TASK_COUNT:-0}
+    if [ "$TASK_COUNT" -gt 0 ]; then
+      PARTS="${TASK_COUNT} tasks, $PARTS"
+    fi
+
+    if [ "$DURATION_MIN" -gt 0 ]; then
+      CTX_VEL=$(awk "BEGIN{printf \"%.1f\", $NEW_CTX / $DURATION_MIN}" 2>/dev/null)
+      PARTS="$PARTS, ${DURATION_MIN}min (${CTX_VEL}% ctx/min)"
+    fi
+
+    add_alert "$PARTS"
+  else
+    # API mode: cost pulse
+    BURN_DISPLAY=""
+    if [ "$DURATION_MIN" -gt 0 ]; then
+      PULSE_BURN=$(awk "BEGIN{printf \"%.2f\", $NEW_COST / $DURATION_MIN}" 2>/dev/null || echo "0")
+      BURN_DISPLAY=", \$${PULSE_BURN}/min"
+    fi
+    COST_DISPLAY=$(printf '%.2f' "$NEW_COST")
+    add_alert "Session: \$${COST_DISPLAY} spent, ${NEW_CTX}% context${BURN_DISPLAY}."
+  fi
+fi
+
 # --- OUTPUT ---
 if [ -n "$ALERTS" ]; then
   jq -cn --arg ctx "[claude-status] IMPORTANT: Show this message to the user exactly as-is, on its own line, before your response: $ALERTS" '{

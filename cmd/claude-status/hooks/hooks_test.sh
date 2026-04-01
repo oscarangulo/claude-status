@@ -327,23 +327,46 @@ fi
 # pulse-hook.sh tests
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== pulse-hook.sh ==="
+echo "=== pulse tests ==="
 
+# Test pulse-hook.sh (Stop event — counter only)
 PULSE_DIR="$TMPDIR/pulse-test"
 mkdir -p "$PULSE_DIR/sessions"
+echo "5" > "$PULSE_DIR/pulse-pulse-sess"
+PULSE_COUNTER_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
+if [ "$PULSE_COUNTER_OUT" = "{}" ]; then
+  pass "pulse-hook increments counter silently"
+else
+  fail "pulse-hook increments counter silently" "output: $PULSE_COUNTER_OUT"
+fi
+COUNTER_VAL=$(cat "$PULSE_DIR/pulse-pulse-sess")
+if [ "$COUNTER_VAL" = "6" ]; then
+  pass "pulse counter incremented to 6"
+else
+  fail "pulse counter incremented to 6" "got: $COUNTER_VAL"
+fi
 
-# Seed a snapshot so pulse-hook has data to read
-echo '{"type":"snapshot","timestamp":"2026-03-26T15:01:00Z","session_id":"pulse-sess","total_cost_usd":0.50,"total_input_tokens":20000,"total_output_tokens":5000,"cache_read_tokens":8000,"cache_write_tokens":3000,"context_used_pct":18,"context_window_size":1000000,"total_duration_ms":90000,"total_api_duration_ms":12000,"total_lines_added":45,"total_lines_removed":3,"model":"claude-opus-4-6"}' > "$PULSE_DIR/sessions/pulse-sess.jsonl"
+# Test pulse in snapshot-hook (PostToolUse — actual output)
+PULSE_SNAP_DIR="$TMPDIR/pulse-snap-test"
+mkdir -p "$PULSE_SNAP_DIR/sessions"
 
-# Seed pulse counter at 2 so next run is call #3 (triggers pulse)
-echo "2" > "$PULSE_DIR/pulse-pulse-sess"
+PULSE_NATIVE="$TMPDIR/.claude/projects/-test-project/pulse-snap-sess.jsonl"
+cat > "$PULSE_NATIVE" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"pulse-snap-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":5000,"output_tokens":1000,"cache_read_input_tokens":2000,"cache_creation_input_tokens":500}},"timestamp":"2026-03-26T15:01:00.000Z","sessionId":"pulse-snap-sess"}
+NATIVE
 
-PULSE_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
+# Seed counter at 2 so next PostToolUse is #3 (triggers pulse)
+echo "2" > "$PULSE_SNAP_DIR/pulse-pulse-snap-sess"
+# Seed stats
+echo '{"tools":{"Bash":5,"Read":3,"Edit":2},"errors":1,"total_calls":10,"compactions":1}' > "$PULSE_SNAP_DIR/stats-pulse-snap-sess.json"
+
+PULSE_OUT=$(echo '{"session_id":"pulse-snap-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_SNAP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
 
 if echo "$PULSE_OUT" | grep -q "tokens"; then
-  pass "pulse fires on 3rd call"
+  pass "pulse fires via snapshot-hook"
 else
-  fail "pulse fires on 3rd call" "output: $PULSE_OUT"
+  fail "pulse fires via snapshot-hook" "output: $PULSE_OUT"
 fi
 
 if echo "$PULSE_OUT" | grep -q "ctx"; then
@@ -352,44 +375,36 @@ else
   fail "pulse includes context %" "output: $PULSE_OUT"
 fi
 
-# Test: pulse does NOT fire on 4th call (not multiple of 3)
-PULSE_OUT2=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
-if [ "$PULSE_OUT2" = "{}" ]; then
-  pass "no pulse on non-multiple call"
+if echo "$PULSE_OUT" | grep -q "cache"; then
+  pass "pulse includes cache hit"
 else
-  fail "no pulse on non-multiple call" "output: $PULSE_OUT2"
+  fail "pulse includes cache hit" "output: $PULSE_OUT"
 fi
 
-# Test: pro mode shows tokens and cache hit
-echo '{"daily_limit":0,"plan":"pro"}' > "$PULSE_DIR/budget.json"
-echo "5" > "$PULSE_DIR/pulse-pulse-sess"
-# Seed stats file for tool breakdown
-echo '{"tools":{"Bash":5,"Read":3,"Edit":2},"errors":1,"total_calls":10,"compactions":1}' > "$PULSE_DIR/stats-pulse-sess.json"
-PULSE_PRO=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
-if echo "$PULSE_PRO" | grep -q "tokens"; then
-  pass "pro mode shows tokens"
+if echo "$PULSE_OUT" | grep -q "calls"; then
+  pass "pulse includes tool calls"
 else
-  fail "pro mode shows tokens" "output: $PULSE_PRO"
+  fail "pulse includes tool calls" "output: $PULSE_OUT"
 fi
-if echo "$PULSE_PRO" | grep -q "cache"; then
-  pass "pro mode shows cache hit"
+
+if echo "$PULSE_OUT" | grep -q "top:"; then
+  pass "pulse includes top tools"
 else
-  fail "pro mode shows cache hit" "output: $PULSE_PRO"
+  fail "pulse includes top tools" "output: $PULSE_OUT"
 fi
-if echo "$PULSE_PRO" | grep -q "calls"; then
-  pass "pro mode shows tool calls"
+
+if echo "$PULSE_OUT" | grep -q "compacted"; then
+  pass "pulse includes compactions"
 else
-  fail "pro mode shows tool calls" "output: $PULSE_PRO"
+  fail "pulse includes compactions" "output: $PULSE_OUT"
 fi
-if echo "$PULSE_PRO" | grep -q "compacted"; then
-  pass "pro mode shows compactions"
+
+# Test: pulse does NOT fire on 4th call
+PULSE_OUT2=$(echo '{"session_id":"pulse-snap-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_SNAP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if echo "$PULSE_OUT2" | grep -q "tokens"; then
+  fail "no pulse on non-multiple call" "output: $PULSE_OUT2"
 else
-  fail "pro mode shows compactions" "output: $PULSE_PRO"
-fi
-if echo "$PULSE_PRO" | grep -q "top:"; then
-  pass "pro mode shows top tools"
-else
-  fail "pro mode shows top tools" "output: $PULSE_PRO"
+  pass "no pulse on non-multiple call"
 fi
 
 # ---------------------------------------------------------------------------
