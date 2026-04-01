@@ -111,10 +111,9 @@ func InstallWithOptions(opts InstallOptions) error {
 			return fmt.Errorf("cannot parse %s: %w", settingsPath, err)
 		}
 		backupPath := settingsPath + ".backup"
-		if err := os.WriteFile(backupPath, data, 0644); err != nil {
-			return fmt.Errorf("cannot create backup: %w", err)
+		if err := os.WriteFile(backupPath, data, 0644); err == nil {
+			fmt.Printf("  Backed up settings to %s\n", backupPath)
 		}
-		fmt.Printf("  Backed up settings to %s\n", backupPath)
 	}
 
 	// Status line — uses the object format: {"type": "command", "command": "..."}
@@ -169,9 +168,14 @@ func InstallWithOptions(opts InstallOptions) error {
 		return fmt.Errorf("cannot marshal settings: %w", err)
 	}
 	if err := os.WriteFile(settingsPath, output, 0644); err != nil {
-		return fmt.Errorf("cannot write settings: %w", err)
+		if hooksSkipped {
+			fmt.Printf("  Skipped settings update (run 'claude-status install' manually)\n")
+		} else {
+			return fmt.Errorf("cannot write settings: %w", err)
+		}
+	} else {
+		fmt.Printf("  Updated %s\n", settingsPath)
 	}
-	fmt.Printf("  Updated %s\n", settingsPath)
 
 	fmt.Println("\nInstallation complete! Restart Claude Code to activate.")
 
