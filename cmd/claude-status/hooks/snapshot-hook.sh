@@ -208,12 +208,26 @@ if [ "$PLAN_MODE" != "pro" ] && [ "$DURATION_MS" -gt 0 ]; then
   fi
 fi
 
-# --- 4. EXPENSIVE LOOP DETECTION ---
-# Detect 3+ consecutive failed tool calls (same tool, error results)
+# --- TOOL TRACKING ---
+# Track tool usage breakdown and error count for session metrics
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || echo "")
 if [ -n "$TOOL_NAME" ] && [ "$TOOL_NAME" != "null" ]; then
-  LOOP_FILE="$DATA_DIR/loop-${SESSION_ID}.json"
+  # Track tool usage stats
+  STATS_FILE="$DATA_DIR/stats-${SESSION_ID}.json"
+  if [ ! -f "$STATS_FILE" ]; then
+    echo '{"tools":{},"errors":0,"total_calls":0}' > "$STATS_FILE"
+  fi
   TOOL_ERROR=$(echo "$INPUT" | jq -r '.tool_result.is_error // false' 2>/dev/null || echo "false")
+  STATS_UPDATED=$(jq --arg t "$TOOL_NAME" --arg err "$TOOL_ERROR" '
+    .total_calls += 1 |
+    .tools[$t] = ((.tools[$t] // 0) + 1) |
+    if $err == "true" then .errors += 1 else . end
+  ' "$STATS_FILE" 2>/dev/null)
+  if [ -n "$STATS_UPDATED" ]; then
+    echo "$STATS_UPDATED" > "$STATS_FILE"
+  fi
+
+  LOOP_FILE="$DATA_DIR/loop-${SESSION_ID}.json"
 
   if [ "$TOOL_ERROR" = "true" ]; then
     # Track consecutive failures

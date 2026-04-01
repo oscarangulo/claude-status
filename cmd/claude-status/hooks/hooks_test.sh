@@ -340,13 +340,13 @@ echo "2" > "$PULSE_DIR/pulse-pulse-sess"
 
 PULSE_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
 
-if echo "$PULSE_OUT" | grep -q "Session:"; then
+if echo "$PULSE_OUT" | grep -q "tokens"; then
   pass "pulse fires on 3rd call"
 else
   fail "pulse fires on 3rd call" "output: $PULSE_OUT"
 fi
 
-if echo "$PULSE_OUT" | grep -q "context"; then
+if echo "$PULSE_OUT" | grep -q "ctx"; then
   pass "pulse includes context %"
 else
   fail "pulse includes context %" "output: $PULSE_OUT"
@@ -360,14 +360,36 @@ else
   fail "no pulse on non-multiple call" "output: $PULSE_OUT2"
 fi
 
-# Test: pro mode shows tokens instead of cost
+# Test: pro mode shows tokens and cache hit
 echo '{"daily_limit":0,"plan":"pro"}' > "$PULSE_DIR/budget.json"
 echo "5" > "$PULSE_DIR/pulse-pulse-sess"
+# Seed stats file for tool breakdown
+echo '{"tools":{"Bash":5,"Read":3,"Edit":2},"errors":1,"total_calls":10,"compactions":1}' > "$PULSE_DIR/stats-pulse-sess.json"
 PULSE_PRO=$(echo '{"session_id":"pulse-sess","hook_event_name":"Stop"}' | CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/pulse-hook.sh" 2>&1)
 if echo "$PULSE_PRO" | grep -q "tokens"; then
   pass "pro mode shows tokens"
 else
   fail "pro mode shows tokens" "output: $PULSE_PRO"
+fi
+if echo "$PULSE_PRO" | grep -q "cache"; then
+  pass "pro mode shows cache hit"
+else
+  fail "pro mode shows cache hit" "output: $PULSE_PRO"
+fi
+if echo "$PULSE_PRO" | grep -q "calls"; then
+  pass "pro mode shows tool calls"
+else
+  fail "pro mode shows tool calls" "output: $PULSE_PRO"
+fi
+if echo "$PULSE_PRO" | grep -q "compacted"; then
+  pass "pro mode shows compactions"
+else
+  fail "pro mode shows compactions" "output: $PULSE_PRO"
+fi
+if echo "$PULSE_PRO" | grep -q "top:"; then
+  pass "pro mode shows top tools"
+else
+  fail "pro mode shows top tools" "output: $PULSE_PRO"
 fi
 
 # ---------------------------------------------------------------------------

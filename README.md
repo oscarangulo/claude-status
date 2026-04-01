@@ -155,7 +155,7 @@ A brief session summary appears every 3 tool calls so you always know where you 
 > `Session: $4.50 spent, 32% context, $0.45/min.`
 
 **Pro mode** (subscription — Pro/Max/Team):
-> `Session: 3 tasks done, 245K tokens, 32% context, +120/-15 lines, 45min.`
+> `3 tasks, 245K tokens, 32% ctx, 68% cache, +120/-15 lines, 42 calls (2% errors) | top: Bash:15 Read:12 Edit:8, 1x compacted, 45min (0.7% ctx/min)`
 
 Pro mode is the default — no configuration needed. If you use the API directly (pay-per-token), switch to API mode for cost tracking:
 

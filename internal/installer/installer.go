@@ -76,7 +76,7 @@ func InstallWithOptions(opts InstallOptions) error {
 	}
 
 	// Extract hook scripts
-	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh", "pulse-hook.sh"}
+	scripts := []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh", "pulse-hook.sh", "compact-hook.sh"}
 	hooksSkipped := false
 	for _, name := range scripts {
 		data, err := HookFiles.ReadFile("hooks/" + name)
@@ -138,6 +138,7 @@ func InstallWithOptions(opts InstallOptions) error {
 	snapshotHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "snapshot-hook.sh"))
 	subagentHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "subagent-hook.sh"))
 	pulseHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "pulse-hook.sh"))
+	compactHookCmd := fmt.Sprintf("bash %s", filepath.Join(hooksDir, "compact-hook.sh"))
 
 	// PostToolUse hook for TodoWrite (task tracking)
 	postToolHook := hookEntry{
@@ -167,6 +168,13 @@ func InstallWithOptions(opts InstallOptions) error {
 	}
 	pulseJSON, _ := json.Marshal(pulseHook)
 	existingHooks["Stop"] = appendIfNotPresent(existingHooks["Stop"], pulseJSON, pulseHookCmd)
+
+	// PostCompact hook (track compaction count)
+	compactHook := hookEntry{
+		Hooks: []hookAction{{Type: "command", Command: compactHookCmd}},
+	}
+	compactJSON, _ := json.Marshal(compactHook)
+	existingHooks["PostCompact"] = appendIfNotPresent(existingHooks["PostCompact"], compactJSON, compactHookCmd)
 
 	hooksJSON, _ := json.Marshal(existingHooks)
 	settings["hooks"] = json.RawMessage(hooksJSON)
@@ -346,7 +354,7 @@ func removeClaudeSetup(home, hooksDir string) error {
 		}
 	}
 
-	for _, name := range []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh", "pulse-hook.sh"} {
+	for _, name := range []string{"status-line.sh", "task-hook.sh", "snapshot-hook.sh", "subagent-hook.sh", "pulse-hook.sh", "compact-hook.sh"} {
 		path := filepath.Join(hooksDir, name)
 		if err := os.Remove(path); err == nil {
 			fmt.Printf("  Removed %s\n", path)
