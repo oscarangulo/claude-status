@@ -149,6 +149,10 @@ func Install() error {
 	fmt.Printf("  Updated %s\n", settingsPath)
 
 	fmt.Println("\nInstallation complete! Restart Claude Code to activate.")
+
+	// Prompt for budget configuration
+	promptBudget(home)
+
 	return nil
 }
 
@@ -773,4 +777,61 @@ func copyExecutable(src, dest string) error {
 		return os.Chmod(dest, 0755)
 	}
 	return os.Chmod(dest, 0644)
+}
+
+type budgetConfig struct {
+	DailyLimit   float64 `json:"daily_limit"`
+	SessionLimit float64 `json:"session_limit"`
+}
+
+func promptBudget(home string) {
+	budgetPath := filepath.Join(home, ".claude-status", "budget.json")
+
+	// If budget already configured, show it and skip
+	if data, err := os.ReadFile(budgetPath); err == nil {
+		var b budgetConfig
+		if json.Unmarshal(data, &b) == nil && (b.DailyLimit > 0 || b.SessionLimit > 0) {
+			fmt.Println()
+			if b.DailyLimit > 0 {
+				fmt.Printf("  Budget: $%.2f/day", b.DailyLimit)
+			}
+			if b.SessionLimit > 0 {
+				fmt.Printf(", $%.2f/session", b.SessionLimit)
+			}
+			fmt.Println(" (already configured)")
+			fmt.Println("  Change with: claude-status budget <amount>")
+			return
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("  Set a daily spending limit? You'll get alerts at 50%, 80%, and 100%.")
+	fmt.Print("  Daily budget in USD (enter to skip): $")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return
+	}
+
+	input = strings.TrimSpace(input)
+	if input == "" {
+		fmt.Println("  Skipped. Set later with: claude-status budget <amount>")
+		return
+	}
+
+	var limit float64
+	if _, err := fmt.Sscanf(input, "%f", &limit); err != nil || limit <= 0 {
+		fmt.Println("  Invalid amount. Set later with: claude-status budget <amount>")
+		return
+	}
+
+	b := budgetConfig{DailyLimit: limit}
+	data, _ := json.MarshalIndent(b, "", "  ")
+	if err := os.WriteFile(budgetPath, data, 0644); err != nil {
+		fmt.Printf("  Cannot save budget: %v\n", err)
+		return
+	}
+
+	fmt.Printf("  Daily limit set to $%.2f. Alerts will appear in your Claude Code conversation.\n", limit)
 }
