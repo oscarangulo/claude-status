@@ -255,6 +255,101 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# snapshot-hook.sh — loop detection tests
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== snapshot-hook.sh — loop detection ==="
+
+LOOP_DIR="$TMPDIR/loop-test"
+mkdir -p "$LOOP_DIR/sessions"
+
+# Create native session for loop test
+LOOP_NATIVE="$TMPDIR/.claude/projects/-test-project/loop-sess.jsonl"
+cat > "$LOOP_NATIVE" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"loop-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":500,"cache_creation_input_tokens":200}},"timestamp":"2026-03-26T15:00:05.000Z","sessionId":"loop-sess"}
+NATIVE
+
+LOOP_BASE='{"session_id":"loop-sess","hook_event_name":"PostToolUse","tool_name":"Bash","tool_result":{"is_error":true}}'
+
+# 1st and 2nd failures — no alert yet
+echo "$LOOP_BASE" | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$LOOP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" >/dev/null 2>&1
+LOOP_OUT2=$(echo "$LOOP_BASE" | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$LOOP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if echo "$LOOP_OUT2" | grep -q "Loop detected"; then
+  fail "no alert before 3 failures" "alert fired too early"
+else
+  pass "no alert before 3 failures"
+fi
+
+# 3rd failure — should alert
+LOOP_OUT3=$(echo "$LOOP_BASE" | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$LOOP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if echo "$LOOP_OUT3" | grep -q "Loop detected"; then
+  pass "loop alert after 3 failures"
+else
+  fail "loop alert after 3 failures" "no alert on 3rd failure"
+fi
+
+# Success resets counter
+SUCCESS_INPUT='{"session_id":"loop-sess","hook_event_name":"PostToolUse","tool_name":"Bash","tool_result":{"is_error":false}}'
+echo "$SUCCESS_INPUT" | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$LOOP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" >/dev/null 2>&1
+if [ ! -f "$LOOP_DIR/loop-loop-sess.json" ]; then
+  pass "success resets loop counter"
+else
+  fail "success resets loop counter" "loop file still exists"
+fi
+
+# ---------------------------------------------------------------------------
+# snapshot-hook.sh — session cost comparison tests
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== snapshot-hook.sh — session cost comparison ==="
+
+COMP_DIR="$TMPDIR/comp-test"
+mkdir -p "$COMP_DIR/sessions"
+
+# Create 3 past sessions with avg cost ~$0.10
+for i in 1 2 3; do
+  echo "{\"type\":\"snapshot\",\"timestamp\":\"2026-03-25T15:00:00Z\",\"session_id\":\"past-$i\",\"total_cost_usd\":0.10}" > "$COMP_DIR/sessions/past-$i.jsonl"
+done
+
+# Create native session with high cost (~$2.50 which is 25x average)
+COMP_NATIVE="$TMPDIR/.claude/projects/-test-project/comp-sess.jsonl"
+cat > "$COMP_NATIVE" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"comp-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":50000,"output_tokens":50000,"cache_read_input_tokens":10000,"cache_creation_input_tokens":5000}},"timestamp":"2026-03-26T15:05:00.000Z","sessionId":"comp-sess"}
+NATIVE
+
+COMP_OUT=$(echo '{"session_id":"comp-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$COMP_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if echo "$COMP_OUT" | grep -q "Expensive session"; then
+  pass "expensive session alert fires"
+else
+  fail "expensive session alert fires" "output: $COMP_OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# snapshot-hook.sh — context watchdog + idle tests
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== snapshot-hook.sh — context & idle ==="
+
+CTX_DIR="$TMPDIR/ctx-test"
+mkdir -p "$CTX_DIR/sessions"
+
+# Create native session with very high context usage (tokens sum to >80% of 200k)
+CTX_NATIVE="$TMPDIR/.claude/projects/-test-project/ctx-sess.jsonl"
+cat > "$CTX_NATIVE" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"ctx-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":80000,"output_tokens":40000,"cache_read_input_tokens":50000,"cache_creation_input_tokens":10000}},"timestamp":"2026-03-26T15:00:05.000Z","sessionId":"ctx-sess"}
+NATIVE
+
+CTX_OUT=$(echo '{"session_id":"ctx-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$CTX_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if echo "$CTX_OUT" | grep -q "Context"; then
+  pass "context warning fires at high usage"
+else
+  fail "context warning fires at high usage" "output: $CTX_OUT"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

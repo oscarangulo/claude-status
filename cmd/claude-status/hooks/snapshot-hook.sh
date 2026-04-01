@@ -194,6 +194,104 @@ if [ "$DURATION_MS" -gt 0 ]; then
   fi
 fi
 
+# --- 4. EXPENSIVE LOOP DETECTION ---
+# Detect 3+ consecutive failed tool calls (same tool, error results)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || echo "")
+if [ -n "$TOOL_NAME" ] && [ "$TOOL_NAME" != "null" ]; then
+  LOOP_FILE="$DATA_DIR/loop-${SESSION_ID}.json"
+  TOOL_ERROR=$(echo "$INPUT" | jq -r '.tool_result.is_error // false' 2>/dev/null || echo "false")
+
+  if [ "$TOOL_ERROR" = "true" ]; then
+    # Track consecutive failures
+    if [ -f "$LOOP_FILE" ]; then
+      PREV_TOOL=$(jq -r '.tool // ""' "$LOOP_FILE" 2>/dev/null)
+      PREV_COUNT=$(jq -r '.count // 0' "$LOOP_FILE" 2>/dev/null)
+      if [ "$PREV_TOOL" = "$TOOL_NAME" ]; then
+        NEW_COUNT=$((PREV_COUNT + 1))
+      else
+        NEW_COUNT=1
+      fi
+    else
+      NEW_COUNT=1
+    fi
+    echo "{\"tool\":\"$TOOL_NAME\",\"count\":$NEW_COUNT}" > "$LOOP_FILE"
+
+    if [ "$NEW_COUNT" -ge 3 ] && ! alert_sent "loop_${TOOL_NAME}"; then
+      add_alert "Loop detected: ${NEW_COUNT} failed ${TOOL_NAME} calls in a row. Consider explaining the issue instead of retrying."
+      mark_alert "loop_${TOOL_NAME}"
+    fi
+  else
+    # Success resets the counter
+    if [ -f "$LOOP_FILE" ]; then
+      rm -f "$LOOP_FILE"
+    fi
+  fi
+fi
+
+# --- 5. SESSION COST COMPARISON ---
+# Alert when current session costs 2x the average of past sessions
+if ! alert_sent "cost_high_vs_avg"; then
+  AVG_DATA=$(for sf in "$SESSION_DIR"/*.jsonl; do
+    [ -f "$sf" ] || continue
+    [ "$sf" = "$LOG_FILE" ] && continue
+    grep '"type":"snapshot"' "$sf" 2>/dev/null | tail -1 | jq -r '.total_cost_usd // 0' 2>/dev/null
+  done | jq -s 'if length >= 3 then {avg: (add / length), n: length} else null end' 2>/dev/null)
+
+  if [ -n "$AVG_DATA" ] && [ "$AVG_DATA" != "null" ]; then
+    AVG_COST=$(echo "$AVG_DATA" | jq -r '.avg')
+    if [ "$(echo "$AVG_COST > 0" | bc 2>/dev/null)" = "1" ]; then
+      RATIO=$(echo "scale=1; $NEW_COST / $AVG_COST" | bc 2>/dev/null || echo "0")
+      if [ "$(echo "$RATIO >= 2.0" | bc 2>/dev/null)" = "1" ]; then
+        AVG_DISPLAY=$(printf '%.2f' "$AVG_COST")
+        COST_DISPLAY=$(printf '%.2f' "$NEW_COST")
+        add_alert "Expensive session: \$${COST_DISPLAY} is ${RATIO}x your average (\$${AVG_DISPLAY}). Consider splitting into smaller tasks."
+        mark_alert "cost_high_vs_avg"
+      fi
+    fi
+  fi
+fi
+
+# --- 6. MODEL DOWNGRADE SUGGESTION ---
+# If using Opus and last 5 tool calls are all lightweight (Read, Grep, Glob, LS)
+CURRENT_MODEL=$(echo "$SNAPSHOT" | jq -r '.model // ""')
+if echo "$CURRENT_MODEL" | grep -qi "opus" && ! alert_sent "model_suggest"; then
+  if [ -n "$NATIVE_FILE" ]; then
+    RECENT_TOOLS=$(tail -20 "$NATIVE_FILE" 2>/dev/null | grep '"tool_use"' | jq -r '.message.content[]?.name // empty' 2>/dev/null | tail -5 || true)
+    if [ -n "$RECENT_TOOLS" ]; then
+      LIGHT_STREAK=$(echo "$RECENT_TOOLS" | grep -cE '^(Read|Grep|Glob|LS|View|ListDir)$' || echo "0")
+      TOTAL_RECENT=$(echo "$RECENT_TOOLS" | grep -c '.' || echo "0")
+    else
+      LIGHT_STREAK=0
+      TOTAL_RECENT=0
+    fi
+    if [ "$TOTAL_RECENT" -ge 5 ] && [ "$LIGHT_STREAK" -eq "$TOTAL_RECENT" ]; then
+      add_alert "Light tasks detected (reads/searches). Consider using Sonnet for this work to save ~70% on costs."
+      mark_alert "model_suggest"
+    fi
+  fi
+fi
+
+# --- 7. IDLE CONTEXT WARNING ---
+# Context > 70% and last native entry was > 10 minutes ago
+if [ "$NEW_CTX" -ge 70 ] && ! alert_sent "idle_ctx"; then
+  if [ -n "$NATIVE_FILE" ]; then
+    # Get the last entry's timestamp from native session, strip milliseconds
+    LAST_NATIVE_TS=$(tail -1 "$NATIVE_FILE" 2>/dev/null | jq -r '.timestamp // ""' 2>/dev/null | sed 's/\.[0-9]*Z$/Z/' || echo "")
+    if [ -n "$LAST_NATIVE_TS" ] && [ "$LAST_NATIVE_TS" != "null" ]; then
+      LAST_EPOCH=$(date -jf "%Y-%m-%dT%H:%M:%SZ" "$LAST_NATIVE_TS" +%s 2>/dev/null || date -d "$LAST_NATIVE_TS" +%s 2>/dev/null || echo "0")
+      NOW_EPOCH=$(date +%s)
+      if [ "$LAST_EPOCH" -gt 0 ]; then
+        IDLE_SECS=$((NOW_EPOCH - LAST_EPOCH))
+        if [ "$IDLE_SECS" -gt 600 ]; then
+          IDLE_MIN=$((IDLE_SECS / 60))
+          add_alert "Context at ${NEW_CTX}% with ${IDLE_MIN}min idle. Consider starting a new session to save tokens."
+          mark_alert "idle_ctx"
+        fi
+      fi
+    fi
+  fi
+fi
+
 # --- OUTPUT ---
 if [ -n "$ALERTS" ]; then
   jq -cn --arg ctx "[claude-status] $ALERTS" '{

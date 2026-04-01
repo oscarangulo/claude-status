@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -96,6 +95,116 @@ func runBudget(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// reportData holds aggregated metrics for a time period.
+type reportData struct {
+	totalCost      float64
+	totalTokens    int64
+	sessionCount   int
+	taskCount      int
+	totalCacheRead int64
+	totalCacheWrite int64
+	totalInput     int64
+	totalOutput    int64
+	topModel       string
+}
+
+func aggregateSessions(files []string, startDate, endDate string) reportData {
+	var d reportData
+	for _, f := range files {
+		session, err := model.ParseSessionFile(f)
+		if err != nil || session == nil || session.Latest == nil {
+			continue
+		}
+
+		sessionDate := session.Latest.Timestamp.Format("2006-01-02")
+		if sessionDate < startDate || sessionDate > endDate {
+			if len(session.Snapshots) == 0 {
+				continue
+			}
+			firstDate := session.Snapshots[0].Timestamp.Format("2006-01-02")
+			if firstDate < startDate || firstDate > endDate {
+				continue
+			}
+		}
+
+		a := analyzer.New()
+		a.LoadSession(session)
+		s := a.Summary()
+
+		d.totalCost += s.TotalCost
+		d.totalTokens += s.TotalTokens
+		d.taskCount += s.TaskCount
+		d.sessionCount++
+		d.totalCacheRead += session.Latest.CacheReadTok
+		d.totalCacheWrite += session.Latest.CacheWriteTok
+		d.totalInput += session.Latest.TotalInputTok
+		d.totalOutput += session.Latest.TotalOutputTok
+		if d.topModel == "" {
+			d.topModel = session.Latest.Model
+		}
+	}
+	return d
+}
+
+func printReport(title string, d reportData, b budgetConfig, budgetDays int) {
+	totalIn := d.totalInput + d.totalCacheRead
+	cacheHit := 0.0
+	if totalIn > 0 {
+		cacheHit = float64(d.totalCacheRead) * 100 / float64(totalIn)
+	}
+
+	fmt.Println("═══════════════════════════════════════════")
+	fmt.Printf("  %s\n", title)
+	fmt.Println("═══════════════════════════════════════════")
+	fmt.Println()
+	fmt.Printf("  Total spent:    $%.4f\n", d.totalCost)
+	if b.DailyLimit > 0 && budgetDays > 0 {
+		totalBudget := b.DailyLimit * float64(budgetDays)
+		pct := d.totalCost * 100 / totalBudget
+		remaining := totalBudget - d.totalCost
+		fmt.Printf("  Budget:         $%.2f (%.0f%% used, $%.2f remaining)\n", totalBudget, pct, remaining)
+	}
+	fmt.Printf("  Sessions:       %d\n", d.sessionCount)
+	fmt.Printf("  Tasks:          %d\n", d.taskCount)
+	fmt.Printf("  Model:          %s\n", d.topModel)
+	fmt.Println()
+	fmt.Printf("  Tokens:         %s total\n", formatTokens(d.totalTokens))
+	fmt.Printf("  Input:          %s\n", formatTokens(d.totalInput))
+	fmt.Printf("  Output:         %s\n", formatTokens(d.totalOutput))
+	fmt.Printf("  Cache read:     %s\n", formatTokens(d.totalCacheRead))
+	fmt.Printf("  Cache write:    %s\n", formatTokens(d.totalCacheWrite))
+	fmt.Printf("  Cache hit:      %.0f%%\n", cacheHit)
+	fmt.Println()
+
+	if d.taskCount > 0 {
+		fmt.Printf("  Avg cost/task:  $%.4f\n", d.totalCost/float64(d.taskCount))
+	}
+	if d.sessionCount > 0 {
+		fmt.Printf("  Avg cost/sess:  $%.4f\n", d.totalCost/float64(d.sessionCount))
+	}
+	if budgetDays > 1 {
+		fmt.Printf("  Avg cost/day:   $%.4f\n", d.totalCost/float64(budgetDays))
+	}
+
+	fmt.Println()
+
+	// Tips
+	if cacheHit < 30 {
+		fmt.Println("  Tip: Low cache hit rate. Use consistent prompts and structured plans.")
+	}
+	if d.totalCost > 0 && d.totalOutput > 0 {
+		ratio := float64(d.totalOutput) / float64(d.totalInput)
+		if ratio > 0.5 {
+			fmt.Println("  Tip: High output ratio. Consider more targeted requests.")
+		}
+	}
+	if b.DailyLimit > 0 && budgetDays == 1 && d.totalCost > b.DailyLimit*0.8 {
+		fmt.Println("  Tip: Close to daily limit. Use Sonnet/Haiku for lighter tasks.")
+	}
+
+	fmt.Println("═══════════════════════════════════════════")
+}
+
 func runReport(cmd *cobra.Command, args []string) error {
 	cfg := config.Default()
 	files, err := cfg.SessionFiles()
@@ -108,106 +217,57 @@ func runReport(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	today := time.Now().UTC().Format("2006-01-02")
-	var totalCost float64
-	var totalTokens int64
-	var sessionCount int
-	var taskCount int
-	var totalCacheRead, totalCacheWrite int64
-	var totalInput, totalOutput int64
-	var topModel string
+	isWeek, _ := cmd.Flags().GetBool("week")
+	b := loadBudget()
 
-	for _, f := range files {
-		session, err := model.ParseSessionFile(f)
-		if err != nil || session == nil || session.Latest == nil {
-			continue
+	if isWeek {
+		now := time.Now().UTC()
+		// Go back to Monday of this week
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		monday := now.AddDate(0, 0, -(weekday - 1))
+		startDate := monday.Format("2006-01-02")
+		endDate := now.Format("2006-01-02")
+		days := weekday
+
+		d := aggregateSessions(files, startDate, endDate)
+		if d.sessionCount == 0 {
+			fmt.Println("No sessions this week.")
+			return nil
 		}
 
-		// Check if session is from today
-		if !strings.HasPrefix(session.Latest.Timestamp.Format("2006-01-02"), today) {
-			if len(session.Snapshots) > 0 && !strings.HasPrefix(session.Snapshots[0].Timestamp.Format("2006-01-02"), today) {
-				continue
+		title := fmt.Sprintf("Weekly Report — %s to %s (%d days)", startDate, endDate, days)
+		printReport(title, d, b, days)
+
+		// Show per-day breakdown
+		fmt.Println()
+		fmt.Printf("  %-12s %10s %8s %8s\n", "Day", "Cost", "Sessions", "Tasks")
+		fmt.Println("  ──────────────────────────────────────────")
+		for i := 0; i < days; i++ {
+			day := monday.AddDate(0, 0, i)
+			dayStr := day.Format("2006-01-02")
+			dd := aggregateSessions(files, dayStr, dayStr)
+			if dd.sessionCount > 0 {
+				fmt.Printf("  %-12s %9s %8d %8d\n", day.Format("Mon 01/02"), fmt.Sprintf("$%.2f", dd.totalCost), dd.sessionCount, dd.taskCount)
+			} else {
+				fmt.Printf("  %-12s %10s %8s %8s\n", day.Format("Mon 01/02"), "—", "—", "—")
 			}
 		}
-
-		a := analyzer.New()
-		a.LoadSession(session)
-		s := a.Summary()
-
-		totalCost += s.TotalCost
-		totalTokens += s.TotalTokens
-		taskCount += s.TaskCount
-		sessionCount++
-		totalCacheRead += session.Latest.CacheReadTok
-		totalCacheWrite += session.Latest.CacheWriteTok
-		totalInput += session.Latest.TotalInputTok
-		totalOutput += session.Latest.TotalOutputTok
-		if topModel == "" {
-			topModel = session.Latest.Model
-		}
+		fmt.Println("═══════════════════════════════════════════")
+		return nil
 	}
 
-	if sessionCount == 0 {
+	// Daily report (default)
+	today := time.Now().UTC().Format("2006-01-02")
+	d := aggregateSessions(files, today, today)
+	if d.sessionCount == 0 {
 		fmt.Println("No sessions today.")
 		return nil
 	}
 
-	// Cache hit rate
-	totalIn := totalInput + totalCacheRead
-	cacheHit := 0.0
-	if totalIn > 0 {
-		cacheHit = float64(totalCacheRead) * 100 / float64(totalIn)
-	}
-
-	b := loadBudget()
-
-	fmt.Println("═══════════════════════════════════════════")
-	fmt.Printf("  Daily Report — %s\n", today)
-	fmt.Println("═══════════════════════════════════════════")
-	fmt.Println()
-	fmt.Printf("  Total spent:    $%.4f\n", totalCost)
-	if b.DailyLimit > 0 {
-		pct := totalCost * 100 / b.DailyLimit
-		remaining := b.DailyLimit - totalCost
-		fmt.Printf("  Budget:         $%.2f (%.0f%% used, $%.2f remaining)\n", b.DailyLimit, pct, remaining)
-	}
-	fmt.Printf("  Sessions:       %d\n", sessionCount)
-	fmt.Printf("  Tasks:          %d\n", taskCount)
-	fmt.Printf("  Model:          %s\n", topModel)
-	fmt.Println()
-	fmt.Printf("  Tokens:         %s total\n", formatTokens(totalTokens))
-	fmt.Printf("  Input:          %s\n", formatTokens(totalInput))
-	fmt.Printf("  Output:         %s\n", formatTokens(totalOutput))
-	fmt.Printf("  Cache read:     %s\n", formatTokens(totalCacheRead))
-	fmt.Printf("  Cache write:    %s\n", formatTokens(totalCacheWrite))
-	fmt.Printf("  Cache hit:      %.0f%%\n", cacheHit)
-	fmt.Println()
-
-	if taskCount > 0 {
-		avgCost := totalCost / float64(taskCount)
-		fmt.Printf("  Avg cost/task:  $%.4f\n", avgCost)
-	}
-	if sessionCount > 0 {
-		avgCost := totalCost / float64(sessionCount)
-		fmt.Printf("  Avg cost/sess:  $%.4f\n", avgCost)
-	}
-
-	fmt.Println()
-
-	// Tips
-	if cacheHit < 30 {
-		fmt.Println("  Tip: Low cache hit rate. Use consistent prompts and structured plans.")
-	}
-	if totalCost > 0 && totalOutput > 0 {
-		ratio := float64(totalOutput) / float64(totalInput)
-		if ratio > 0.5 {
-			fmt.Println("  Tip: High output ratio. Consider more targeted requests.")
-		}
-	}
-	if b.DailyLimit > 0 && totalCost > b.DailyLimit*0.8 {
-		fmt.Println("  Tip: Close to daily limit. Use Sonnet/Haiku for lighter tasks.")
-	}
-
-	fmt.Println("═══════════════════════════════════════════")
+	title := fmt.Sprintf("Daily Report — %s", today)
+	printReport(title, d, b, 1)
 	return nil
 }

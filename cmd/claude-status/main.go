@@ -95,6 +95,8 @@ func main() {
 		RunE:  runReport,
 	}
 
+	reportCmd.Flags().Bool("week", false, "show weekly report instead of daily")
+
 	rootCmd.AddCommand(installCmd, uninstallCmd, updateCmd, historyCmd, budgetCmd, reportCmd)
 
 	if err := rootCmd.Execute(); err != nil {
