@@ -296,6 +296,35 @@ if [ "$NEW_CTX" -ge 70 ] && ! alert_sent "idle_ctx"; then
   fi
 fi
 
+# --- 8. PERIODIC COST PULSE ---
+# Show a brief cost summary every N tool calls (default: 3, configurable via budget.json pulse_every)
+PULSE_EVERY=3
+if [ -f "$BUDGET_FILE" ]; then
+  CONFIGURED_PULSE=$(jq -r '.pulse_every // 0' "$BUDGET_FILE" 2>/dev/null)
+  if [ "$CONFIGURED_PULSE" -gt 0 ] 2>/dev/null; then
+    PULSE_EVERY=$CONFIGURED_PULSE
+  fi
+fi
+
+PULSE_FILE="$DATA_DIR/pulse-${SESSION_ID}"
+PULSE_COUNT=0
+if [ -f "$PULSE_FILE" ]; then
+  PULSE_COUNT=$(cat "$PULSE_FILE" 2>/dev/null || echo "0")
+fi
+PULSE_COUNT=$((PULSE_COUNT + 1))
+echo "$PULSE_COUNT" > "$PULSE_FILE"
+
+if [ $(( PULSE_COUNT % PULSE_EVERY )) -eq 0 ]; then
+  DURATION_MIN=$(awk "BEGIN{d=$DURATION_MS/60000; printf \"%d\", (d > 0) ? d : 0}" 2>/dev/null)
+  BURN_DISPLAY=""
+  if [ "$DURATION_MIN" -gt 0 ]; then
+    PULSE_BURN=$(awk "BEGIN{printf \"%.2f\", $NEW_COST / $DURATION_MIN}" 2>/dev/null || echo "0")
+    BURN_DISPLAY=", \$${PULSE_BURN}/min"
+  fi
+  COST_DISPLAY=$(printf '%.2f' "$NEW_COST")
+  add_alert "Session: \$${COST_DISPLAY} spent, ${NEW_CTX}% context${BURN_DISPLAY}."
+fi
+
 # --- OUTPUT ---
 if [ -n "$ALERTS" ]; then
   jq -cn --arg ctx "[claude-status] $ALERTS" '{

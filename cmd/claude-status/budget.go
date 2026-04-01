@@ -18,6 +18,7 @@ import (
 type budgetConfig struct {
 	DailyLimit   float64 `json:"daily_limit"`
 	SessionLimit float64 `json:"session_limit"`
+	PulseEvery   int     `json:"pulse_every,omitempty"`
 }
 
 func budgetFilePath() string {
@@ -45,9 +46,10 @@ func saveBudget(b budgetConfig) error {
 
 func runBudget(cmd *cobra.Command, args []string) error {
 	sessionLimit, _ := cmd.Flags().GetFloat64("session")
+	pulseEvery, _ := cmd.Flags().GetInt("pulse")
 	b := loadBudget()
 
-	if len(args) == 0 && sessionLimit == 0 {
+	if len(args) == 0 && sessionLimit == 0 && pulseEvery == 0 {
 		// Show current budget
 		if b.DailyLimit == 0 && b.SessionLimit == 0 {
 			fmt.Println("No budget set. Usage:")
@@ -61,6 +63,11 @@ func runBudget(cmd *cobra.Command, args []string) error {
 		}
 		if b.SessionLimit > 0 {
 			fmt.Printf("Session limit: $%.2f\n", b.SessionLimit)
+		}
+		if b.PulseEvery > 0 {
+			fmt.Printf("Cost pulse:    every %d tool calls\n", b.PulseEvery)
+		} else {
+			fmt.Println("Cost pulse:    every 3 tool calls (default)")
 		}
 		fmt.Println("\nAlerts fire at 50%, 80%, and 100% of each limit.")
 		return nil
@@ -78,6 +85,10 @@ func runBudget(cmd *cobra.Command, args []string) error {
 		b.SessionLimit = sessionLimit
 	}
 
+	if pulseEvery > 0 {
+		b.PulseEvery = pulseEvery
+	}
+
 	if err := saveBudget(b); err != nil {
 		return fmt.Errorf("cannot save budget: %w", err)
 	}
@@ -89,6 +100,9 @@ func runBudget(cmd *cobra.Command, args []string) error {
 	}
 	if b.SessionLimit > 0 {
 		fmt.Printf("Session limit set to $%.2f\n", b.SessionLimit)
+	}
+	if b.PulseEvery > 0 {
+		fmt.Printf("Cost pulse every %d tool calls\n", b.PulseEvery)
 	}
 
 	fmt.Println("\nYou'll get alerts at 50%, 80%, and 100% — directly in your Claude Code conversation.")

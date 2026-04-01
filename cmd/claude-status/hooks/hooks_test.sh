@@ -321,6 +321,47 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# snapshot-hook.sh — cost pulse tests
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== snapshot-hook.sh — cost pulse ==="
+
+PULSE_DIR="$TMPDIR/pulse-test"
+mkdir -p "$PULSE_DIR/sessions"
+
+# Create native session
+PULSE_NATIVE="$TMPDIR/.claude/projects/-test-project/pulse-sess.jsonl"
+cat > "$PULSE_NATIVE" <<'NATIVE'
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-26T15:00:00.000Z","sessionId":"pulse-sess"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","usage":{"input_tokens":5000,"output_tokens":1000,"cache_read_input_tokens":500,"cache_creation_input_tokens":200}},"timestamp":"2026-03-26T15:01:00.000Z","sessionId":"pulse-sess"}
+NATIVE
+
+# Seed pulse counter at 2 so next run is call #3 (triggers pulse)
+echo "2" > "$PULSE_DIR/pulse-pulse-sess"
+
+PULSE_OUT=$(echo '{"session_id":"pulse-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+
+if echo "$PULSE_OUT" | grep -q "Session:"; then
+  pass "cost pulse fires on 3rd snapshot"
+else
+  fail "cost pulse fires on 3rd snapshot" "output: $PULSE_OUT"
+fi
+
+if echo "$PULSE_OUT" | grep -q "context"; then
+  pass "cost pulse includes context %"
+else
+  fail "cost pulse includes context %" "output: $PULSE_OUT"
+fi
+
+# Test: pulse does NOT fire on 4th snapshot (not multiple of 3)
+PULSE_OUT2=$(echo '{"session_id":"pulse-sess","hook_event_name":"PostToolUse","tool_name":"Bash"}' | HOME="$TMPDIR" CLAUDE_STATUS_DIR="$PULSE_DIR" bash "$SCRIPT_DIR/snapshot-hook.sh" 2>&1)
+if [ "$PULSE_OUT2" = "{}" ]; then
+  pass "no pulse on non-multiple snapshot"
+else
+  fail "no pulse on non-multiple snapshot" "output: $PULSE_OUT2"
+fi
+
+# ---------------------------------------------------------------------------
 # snapshot-hook.sh — loop detection tests
 # ---------------------------------------------------------------------------
 echo ""

@@ -15,6 +15,7 @@ import (
 type budgetConfig struct {
 	DailyLimit   float64 `json:"daily_limit"`
 	SessionLimit float64 `json:"session_limit"`
+	PulseEvery   int     `json:"pulse_every,omitempty"`
 }
 
 func renderDashboard(a *analyzer.Analyzer, width int) string {

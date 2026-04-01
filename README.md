@@ -148,7 +148,25 @@ When Claude creates a plan with 3+ tasks, you get an instant cost estimate based
 
 Accuracy improves as you complete more tasks. Needs 2+ completed tasks for the first estimate.
 
-### 9. Subagent cost tracking
+### 9. Cost pulse
+
+A brief cost summary appears every 3 tool calls so you always know where you stand — no need to check `/cost`.
+
+> `Session: $4.50 spent, 32% context, $0.45/min.`
+
+Configure the frequency in your budget:
+
+```bash
+claude-status budget --pulse 5   # every 5 tool calls instead of 3
+```
+
+Or set it directly in `~/.claude-status/budget.json`:
+
+```json
+{"daily_limit": 20, "pulse_every": 5}
+```
+
+### 10. Subagent cost tracking
 
 When Claude spawns subagents (Explore, Plan, general-purpose), each one's cost is tracked individually. See exactly where your tokens go.
 
@@ -225,7 +243,7 @@ Claude Code tool call
 snapshot-hook.sh runs (< 50ms)
        |
        v
-Reads native session data, computes cost, checks 9 alert conditions
+Reads native session data, computes cost, checks 10 alert conditions
        |
        v
 Threshold crossed?  -->  Alert injected into conversation
