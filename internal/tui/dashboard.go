@@ -1,12 +1,21 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/oscarangulo/claude-status/internal/analyzer"
 	"github.com/oscarangulo/claude-status/internal/model"
 )
+
+type budgetConfig struct {
+	DailyLimit   float64 `json:"daily_limit"`
+	SessionLimit float64 `json:"session_limit"`
+}
 
 func renderDashboard(a *analyzer.Analyzer, width int) string {
 	if width < 40 {
@@ -24,6 +33,12 @@ func renderDashboard(a *analyzer.Analyzer, width int) string {
 	header := renderHeader(summary, innerWidth)
 	b.WriteString(headerStyle.Width(innerWidth).Render(header))
 	b.WriteString("\n")
+
+	// Budget
+	if budget := renderBudget(summary.TotalCost, innerWidth); budget != "" {
+		b.WriteString(sectionStyle.Width(innerWidth).Render(budget))
+		b.WriteString("\n")
+	}
 
 	// Context bar
 	ctxBar := renderContextBar(summary.ContextUsedPct, innerWidth)
@@ -192,6 +207,106 @@ func renderTips(tips []string, width int) string {
 	}
 
 	return title + "\n" + strings.Join(lines, "\n")
+}
+
+func loadBudget() budgetConfig {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return budgetConfig{}
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".claude-status", "budget.json"))
+	if err != nil {
+		return budgetConfig{}
+	}
+	var b budgetConfig
+	json.Unmarshal(data, &b)
+	return b
+}
+
+func dailySpend() float64 {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return 0
+	}
+	sessDir := filepath.Join(home, ".claude-status", "sessions")
+	entries, err := os.ReadDir(sessDir)
+	if err != nil {
+		return 0
+	}
+	today := time.Now().Format("2006-01-02")
+	var total float64
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.ModTime().Format("2006-01-02") != today {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(sessDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			if strings.Contains(lines[i], `"type":"snapshot"`) {
+				var snap struct {
+					Cost float64 `json:"total_cost_usd"`
+				}
+				if json.Unmarshal([]byte(lines[i]), &snap) == nil {
+					total += snap.Cost
+				}
+				break
+			}
+		}
+	}
+	return total
+}
+
+func renderBudget(sessionCost float64, width int) string {
+	b := loadBudget()
+	if b.DailyLimit <= 0 {
+		return ""
+	}
+
+	title := titleStyle.Render("Budget")
+
+	totalToday := dailySpend()
+	if totalToday < sessionCost {
+		totalToday = sessionCost
+	}
+
+	pct := totalToday * 100 / b.DailyLimit
+	remaining := b.DailyLimit - totalToday
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	barWidth := width - 20
+	if barWidth < 10 {
+		barWidth = 10
+	}
+	filled := int(pct / 100 * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	bar := barFilledStyle.Render(strings.Repeat("█", filled)) +
+		barEmptyStyle.Render(strings.Repeat("░", barWidth-filled))
+
+	pctStr := fmt.Sprintf("%.0f%%", pct)
+	style := costStyle
+	if pct >= 100 {
+		style = dangerStyle
+	} else if pct >= 80 {
+		style = warnStyle
+	}
+
+	line1 := labelStyle.Render("  Daily:     ") + bar + " " + style.Render(pctStr)
+	line2 := labelStyle.Render("  Spent:     ") + costStyle.Render(fmt.Sprintf("$%.2f", totalToday)) +
+		labelStyle.Render(" / ") + valueStyle.Render(fmt.Sprintf("$%.2f", b.DailyLimit)) +
+		labelStyle.Render("  Remaining: ") + valueStyle.Render(fmt.Sprintf("$%.2f", remaining))
+
+	return title + "\n" + line1 + "\n" + line2
 }
 
 func formatTokens(n int64) string {

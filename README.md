@@ -2,149 +2,129 @@
   <img src="logo.png" alt="Claude Status" width="200">
   <h1 align="center">claude-status</h1>
   <p align="center">
-    <strong>Smart cost guardian for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a></strong>
-  </p>
-  <p align="center">
-    Budget alerts, context warnings, and spending reports — delivered directly in your conversation.
+    <strong>Stop burning money on Claude Code.</strong>
   </p>
   <p align="center">
     <a href="https://github.com/oscarangulo/claude-status/releases"><img src="https://img.shields.io/github/v/release/oscarangulo/claude-status" alt="Release"></a>
     <a href="https://github.com/oscarangulo/claude-status/actions"><img src="https://github.com/oscarangulo/claude-status/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/oscarangulo/claude-status" alt="License"></a>
   </p>
-  <p align="center">
-    <a href="#quick-start">Quick Start</a> ·
-    <a href="#budget-alerts">Budget</a> ·
-    <a href="#what-it-monitors">Features</a> ·
-    <a href="#commands">Commands</a> ·
-    <a href="#contributing">Contribute</a>
-  </p>
 </p>
 
 ---
 
-claude-status watches your Claude Code spending and alerts you before things get expensive. No dashboard to check, no extension to open — warnings appear right in your conversation, in both CLI and VS Code.
+**You've been there.** You finish a Claude Code session, type `/cost`, and see $45. A task that should have cost $5 turned into a money pit because Claude got stuck in a loop, your context overflowed, or you just didn't notice the meter running.
+
+**claude-status makes that impossible.** It watches your spending in real-time and warns you *inside the conversation* before things get expensive. No dashboard to check. No extension to open. The warning comes to you.
 
 ```
 [claude-status] BUDGET WARNING: Daily spend $16.40 is 82% of your $20 daily limit.
 ```
 
 ```
-[claude-status] CONTEXT CRITICAL (92%): Use /compact NOW or risk losing conversation history.
+[claude-status] Loop detected: 4 failed Bash calls in a row.
+               Consider explaining the issue instead of retrying.
 ```
 
 ```
-[claude-status] High burn rate: $0.65/min. Consider breaking tasks into smaller pieces.
+[claude-status] Expensive session: $12.40 is 2.0x your average ($6.20).
+               Consider splitting into smaller tasks.
 ```
 
-## Quick Start
+<p align="center">
+  <strong>Works in CLI and VS Code. Zero configuration after install.</strong>
+</p>
+
+## Install in 30 seconds
 
 ```bash
-# Install (hooks are configured automatically)
 brew install oscarangulo/claude-status/claude-status
-
-# Set a daily budget (optional)
-claude-status budget 20
-
-# Restart Claude Code — alerts start automatically
-```
-
-Set a spending limit and get warned before you blow it:
-
-```bash
-claude-status budget 30       # $30/day limit
-claude-status budget --session 10  # $10/session limit
-claude-status budget 0        # disable daily limit
-```
-
-## Budget Alerts
-
-Set a spending limit and get warned before you blow it.
-
-```bash
 claude-status budget 20
 ```
 
-| Alert | When | Example |
-|-------|------|---------|
-| Budget update | 50% of daily limit | `Daily spend $10.00 is 50% of $20 limit` |
-| Budget warning | 80% of daily limit | `BUDGET WARNING: $16.40 is 82% of $20 limit` |
-| Budget exceeded | 100% of daily limit | `BUDGET EXCEEDED: $22.50 has passed your $20 limit` |
-| Session warning | 80% of session limit | `Session spend $4.20 is 84% of $5 session limit` |
-| Session exceeded | 100% of session limit | `SESSION BUDGET EXCEEDED: $5.30, limit is $5` |
+Restart Claude Code. Done. You're protected.
 
-Alerts appear **once per threshold per session** — no spam.
+> No Homebrew? See [other install options](#installation).
 
-### How alerts work
+---
 
-claude-status uses Claude Code's `additionalContext` hook output. When a threshold is crossed, the alert is injected into Claude's context as a system reminder. Claude sees it and can react — for example, suggesting cheaper alternatives or confirming before expensive operations.
+## Why you need this
 
-This works identically in **CLI terminal** and **VS Code extension**.
+| Without claude-status | With claude-status |
+|---|---|
+| Check `/cost` manually and hope you remember | Get warned at 50%, 80%, 100% of your budget automatically |
+| Claude retries a failing command 10 times silently | Alert after 3 failures: *"Loop detected, stop retrying"* |
+| Context fills up, Claude forgets your conversation | Warning at 80%: *"Use /compact soon"* |
+| Use Opus for simple file reads at $5/M tokens | Suggestion: *"Use Sonnet for reads, save 70%"* |
+| Realize at end of day you spent $60 | Daily/weekly reports with per-session breakdown |
+| Each session costs differently, no pattern visibility | Alert when a session costs 2x your average |
 
-### Budget configuration
+---
+
+## 9 Alerts That Save You Money
+
+Every alert appears **inside your conversation** as a system reminder. Claude sees it too and can react.
+
+### Budget Protection
+
+Set a daily limit. Get warned before you blow it.
 
 ```bash
-# Set daily budget
-claude-status budget 20
-
-# Set per-session budget
-claude-status budget --session 5
-
-# Set both
-claude-status budget 20 --session 5
-
-# Check current budget
-claude-status budget
-
-# Disable
-claude-status budget 0
+claude-status budget 20         # alerts at $10, $16, and $20
+claude-status budget --session 5  # per-session limit too
 ```
 
-Budget is stored in `~/.claude-status/budget.json`.
+> `Daily spend $10.00 is 50% of $20 limit`
+>
+> `BUDGET WARNING: $16.40 is 82% of $20 limit`
+>
+> `BUDGET EXCEEDED: $22.50 has passed your $20 limit`
 
-## What it Monitors
+### Loop Detection
+
+Claude gets stuck retrying a failing command? You'll know after 3 failures instead of 30.
+
+> `Loop detected: 4 failed Bash calls in a row. Consider explaining the issue instead of retrying.`
+
+**This one alert alone can save you $10+ per stuck session.**
+
+### Expensive Session Alert
+
+Your sessions have an average cost. When one session hits 2x that average, you get a heads up.
+
+> `Expensive session: $12.40 is 2.0x your average ($6.20). Consider splitting into smaller tasks.`
+
+### Model Suggestion
+
+Running Opus ($5/M input) to read files? That's like taking a Ferrari to the grocery store.
+
+> `Light tasks detected (reads/searches). Consider using Sonnet for this work to save ~70% on costs.`
 
 ### Context Watchdog
 
-Alerts before your context window overflows and Claude loses conversation history.
+When your context window fills up, Claude starts losing earlier parts of the conversation. You want to `/compact` before that happens.
 
-| Context % | Alert |
-|-----------|-------|
-| 80% | `Context window at 80%. Consider using /compact soon.` |
-| 90% | `CONTEXT CRITICAL (90%): Use /compact NOW or risk losing conversation history.` |
+> `Context window at 80%. Consider using /compact soon.`
+>
+> `CONTEXT CRITICAL (92%): Use /compact NOW or risk losing conversation history.`
 
-### Burn Rate Detection
+### Burn Rate Warning
 
-Warns when you're spending too fast.
+Spending $0.50+ per minute? Something's off.
 
-| Condition | Alert |
-|-----------|-------|
-| > $0.50/min | `High burn rate: $0.65/min. Consider breaking tasks into smaller pieces.` |
+> `High burn rate: $0.65/min. Consider breaking tasks into smaller pieces.`
 
-### Per-Task Cost Tracking
+### Idle Context Warning
 
-When you use plans (TodoWrite), claude-status captures a cost snapshot when each task starts and completes:
+Context is high and you haven't done anything for 10 minutes? Start fresh.
 
-```
-task_cost = cost_at_completion - cost_at_start
-```
+> `Context at 75% with 15min idle. Consider starting a new session to save tokens.`
 
-Visible in the TUI dashboard and daily report.
+---
 
-## Commands
+## Spending Reports
 
-```bash
-claude-status install           # Set up hooks + optional budget
-claude-status budget [amount]   # Set daily limit (alerts at 50%, 80%, 100%)
-claude-status budget --session N  # Set per-session limit
-claude-status report            # Today's spending summary
-claude-status                   # TUI dashboard (optional)
-claude-status history           # Past session summaries
-claude-status update            # Upgrade binary + refresh hooks
-claude-status uninstall         # Interactive cleanup
-```
-
-### Daily Report
+### Daily
 
 ```bash
 claude-status report
@@ -155,40 +135,109 @@ claude-status report
   Daily Report — 2026-04-01
 ═══════════════════════════════════════════
 
-  Total spent:    $23.0347
-  Budget:         $20.00 (115% used, $-3.03 remaining)
+  Total spent:    $23.03
+  Budget:         $20.00 (115% used)
   Sessions:       3
   Tasks:          8
-  Model:          claude-opus-4-6
 
-  Tokens:         34.1M total
+  Avg cost/task:  $2.88
+  Avg cost/sess:  $7.68
   Cache hit:      50%
-
-  Avg cost/task:  $2.8793
-  Avg cost/sess:  $7.6782
 
   Tip: Close to daily limit. Use Sonnet/Haiku for lighter tasks.
 ═══════════════════════════════════════════
 ```
 
+### Weekly
+
+```bash
+claude-status report --week
+```
+
+```
+  Day                Cost Sessions    Tasks
+  ──────────────────────────────────────────
+  Mon 03/31         $8.20        2        5
+  Tue 04/01        $31.91        3       17
+  Wed 04/02        $18.20        2        9
+  Thu 04/03        $12.50        4       11
+  Fri 04/04         $5.30        1        3
+═══════════════════════════════════════════
+  Total:           $76.11   Avg/day: $15.22
+```
+
 ### TUI Dashboard
 
-Run `claude-status` with no arguments to open the terminal dashboard. Shows real-time cost, tokens, context bar, per-task breakdown, and optimization tips.
+Run `claude-status` with no arguments for a real-time terminal dashboard:
+
+- Budget progress bar with remaining amount
+- Context window usage
+- Token breakdown (input, output, cache hit rate)
+- Per-task cost when using plans
+- Optimization tips
+
+---
+
+## How It Works
+
+```
+You use Claude Code normally
+         |
+         v
+Every tool call triggers snapshot-hook.sh (< 50ms)
+         |
+         v
+Hook reads your native session data (~/.claude/projects/...)
+         |
+         v
+Computes cost, checks thresholds, detects patterns
+         |
+         v
+If threshold crossed --> alert appears in your conversation
+If nothing wrong     --> silent, zero interruption
+```
+
+**That's it.** No background processes. No external services. No data leaves your machine.
+
+Three hooks do all the work:
+
+| Hook | What it does |
+|------|-------------|
+| **snapshot-hook.sh** | The brain. Reads session data, computes cost, runs all 9 alert checks, outputs warnings via `additionalContext` |
+| **task-hook.sh** | Tracks per-task cost when you use plans (TodoWrite) |
+| **status-line.sh** | Terminal status bar in CLI mode |
+
+Alerts use Claude Code's `additionalContext` output — they appear as system reminders that both you and Claude can see. This works identically in **CLI** and **VS Code**.
+
+---
+
+## Commands
+
+| Command | What it does |
+|---------|-------------|
+| `claude-status` | TUI dashboard |
+| `claude-status budget 20` | Set $20/day daily limit |
+| `claude-status budget --session 5` | Set $5/session limit |
+| `claude-status budget` | Show current budget |
+| `claude-status budget 0` | Disable budget |
+| `claude-status report` | Today's spending |
+| `claude-status report --week` | This week's spending |
+| `claude-status history` | All past sessions |
+| `claude-status install` | Set up hooks (auto on brew) |
+| `claude-status update` | Upgrade + refresh hooks |
+| `claude-status uninstall` | Clean removal |
+
+---
 
 ## Installation
 
-### Requirements
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
-- [jq](https://jqlang.github.io/jq/) — JSON processor used by hook scripts
-
-### Option 1: Homebrew (macOS / Linux)
+### Option 1: Homebrew (recommended)
 
 ```bash
 brew install oscarangulo/claude-status/claude-status
 ```
 
-Hooks are configured automatically. Just restart Claude Code.
+Hooks configure automatically. Just restart Claude Code.
 
 ### Option 2: Go install
 
@@ -197,18 +246,9 @@ go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
 claude-status install
 ```
 
-### Option 3: From source
+### Option 3: Download binary
 
-```bash
-git clone https://github.com/oscarangulo/claude-status.git
-cd claude-status
-make install
-claude-status install
-```
-
-### Option 4: Download binary
-
-Download from [Releases](https://github.com/oscarangulo/claude-status/releases):
+Grab the latest from [Releases](https://github.com/oscarangulo/claude-status/releases):
 
 | OS | Architecture | Binary |
 |----|-------------|--------|
@@ -224,71 +264,63 @@ chmod +x claude-status
 ./claude-status install
 ```
 
-### What `install` does
-
-1. Ensures the `claude-status` binary is in your `PATH`
-2. Copies hook scripts to `~/.claude-status/hooks/`
-3. Configures `~/.claude/settings.json` with hooks
-4. Asks you to set a daily budget (optional)
-5. Creates a backup of your existing settings
-
-Restart Claude Code after installing.
-
-## How it Works
-
-```
-Claude Code ──PostToolUse──> snapshot-hook.sh ──> cost snapshot + alerts
-             ──PostToolUse──> task-hook.sh    ──> per-task cost tracking
-             ──statusLine───> status-line.sh  ──> terminal display (CLI only)
-```
-
-Three hooks, each with a specific job:
-
-| Hook | Trigger | What it does |
-|------|---------|-------------|
-| `snapshot-hook.sh` | Every tool use | Reads native Claude Code data, writes cost snapshots, checks budget/context/burn rate, outputs alerts |
-| `task-hook.sh` | TodoWrite | Tracks task start/complete for per-task cost |
-| `status-line.sh` | After each response (CLI only) | Colored terminal status line |
-
-All data is stored locally in `~/.claude-status/`. Nothing is sent anywhere.
-
-## Updating
+### Option 4: From source
 
 ```bash
-claude-status update
+git clone https://github.com/oscarangulo/claude-status.git
+cd claude-status
+make install
+claude-status install
 ```
 
-This upgrades the binary (if possible for your install method), refreshes hook scripts, and preserves your budget and session data.
+### Requirements
 
-## Uninstalling
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- [jq](https://jqlang.github.io/jq/) (installed automatically with Homebrew)
 
-```bash
-claude-status uninstall
-```
-
-Choose what to remove:
-
-- **setup** — Claude Code hooks only (keeps data and budget)
-- **data** — setup + `~/.claude-status`
-- **full** — setup + data + binaries + IDE extensions
+---
 
 ## Pricing Reference
 
-Cost calculations use official Anthropic pricing (per million tokens):
+Cost is computed using official Anthropic pricing (per million tokens):
 
-| | Input | Output | Cache Read | Cache Write (5min) |
+| | Input | Output | Cache Read | Cache Write |
 |---|---:|---:|---:|---:|
 | **Opus 4.6** | $5.00 | $25.00 | $0.50 | $6.25 |
 | **Sonnet 4.6** | $3.00 | $15.00 | $0.30 | $3.75 |
 | **Haiku 4.5** | $1.00 | $5.00 | $0.10 | $1.25 |
 
-## VS Code / Cursor Extension
+---
 
-The VS Code extension shows cost data in your IDE status bar: **[claude-status-vs-extension](https://github.com/oscarangulo/claude-status-vs-extension)**
+## FAQ
+
+**Does it slow down Claude Code?**
+No. Each hook runs in under 50ms. You won't notice it.
+
+**Does it send my data anywhere?**
+No. Everything stays in `~/.claude-status/`. Zero network calls.
+
+**Does it work in VS Code?**
+Yes. Alerts use `PostToolUse` hooks which work in both CLI and VS Code.
+
+**Can I use it without setting a budget?**
+Yes. Loop detection, context warnings, model suggestions, and burn rate alerts work without any budget configured.
+
+**How do I update?**
+`claude-status update` or `brew upgrade claude-status`.
+
+**How do I remove it?**
+`claude-status uninstall` gives you options: remove hooks only, hooks + data, or everything.
+
+---
+
+## VS Code Extension
+
+Want cost info in your IDE status bar too? See **[claude-status-vs-extension](https://github.com/oscarangulo/claude-status-vs-extension)**.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Areas where help is welcome:
+See [CONTRIBUTING.md](CONTRIBUTING.md). Help wanted:
 
 - Windows testing ([#3](https://github.com/oscarangulo/claude-status/issues/3))
 - Per-subagent cost tracking ([#4](https://github.com/oscarangulo/claude-status/issues/4))
