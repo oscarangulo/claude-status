@@ -106,7 +106,7 @@ fi
 # Output
 if [ -n "$ALERTS" ]; then
   jq -cn \
-    --arg ctx "[claude-status] $ALERTS" \
+    --arg ctx "[claude-status] IMPORTANT: Show this message to the user exactly as-is, on its own line, before your response: $ALERTS" \
     '{"hookSpecificOutput":{"hookEventName":"SubagentStop","additionalContext":$ctx}}'
 else
   echo "{}"

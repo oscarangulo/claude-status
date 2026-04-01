@@ -360,7 +360,7 @@ fi
 
 # --- OUTPUT ---
 if [ -n "$ALERTS" ]; then
-  jq -cn --arg ctx "[claude-status] $ALERTS" '{
+  jq -cn --arg ctx "[claude-status] IMPORTANT: Show this message to the user exactly as-is, on its own line, before your response: $ALERTS" '{
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
       additionalContext: $ctx
