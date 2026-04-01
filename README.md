@@ -2,7 +2,7 @@
   <img src="logo.png" alt="Claude Status" width="200">
   <h1 align="center">claude-status</h1>
   <p align="center">
-    <strong>Real-time spending alerts for Claude Code. Know before you overspend.</strong>
+    <strong>Know what Claude Code is doing. In real time. Inside your conversation.</strong>
   </p>
   <p align="center">
     <a href="https://github.com/oscarangulo/claude-status/releases"><img src="https://img.shields.io/github/v/release/oscarangulo/claude-status" alt="Release"></a>
@@ -13,13 +13,19 @@
 
 ---
 
-Claude Code doesn't tell you what you're spending *while* you're spending it. You find out at the end — after the damage is done.
+Claude Code is powerful but opaque. You don't know how fast your context is filling up, how many tool calls failed, or whether you should `/compact` before it's too late.
 
-**claude-status fixes that.** It monitors every tool call and warns you *inside your conversation* the moment something looks wrong: budget limits, stuck loops, context overflow, wrong model for the job.
+**claude-status gives you visibility.** Every few interactions, you see a pulse like this:
 
 ```
-[claude-status] BUDGET WARNING: Daily spend $16.40 is 82% of your $20 daily limit.
+[claude-status] 3 tasks, 245K tokens, 32% ctx, 68% cache, +120/-15 lines,
+                42 calls (2% errors) | top: Bash:15 Read:12 Edit:8,
+                1x compacted, 45min (0.7% ctx/min)
 ```
+
+At a glance you know: what got done, how much context you have left, whether cache is working, what tools Claude is using, and how fast you're burning through context.
+
+When something goes wrong, you get a targeted alert:
 
 ```
 [claude-status] Loop detected: 4 failed Bash calls in a row.
@@ -27,157 +33,118 @@ Claude Code doesn't tell you what you're spending *while* you're spending it. Yo
 ```
 
 ```
-[claude-status] Plan estimate: 5 tasks x $2.88 avg = ~$14.40. Budget remaining: $5.60.
-               WARNING: This may exceed your remaining budget. Consider splitting into phases.
+[claude-status] CONTEXT CRITICAL (92%): Use /compact NOW or risk losing conversation history.
 ```
 
-**No dashboard to check. No tab to switch to. Alerts come to you.**
+**No dashboard. No tab to switch to. It appears right in your conversation.**
 
 ---
 
-## Install in 30 seconds
+## Install
 
 ```bash
 brew install claude-status
 ```
 
-Restart Claude Code. Done.
+Restart Claude Code. That's it. Works immediately with zero configuration.
 
-> No Homebrew? See [other install options](#installation).
-
----
-
-## What it catches
-
-| Problem | What happens without claude-status | What happens with claude-status |
-|---|---|---|
-| **Runaway spending** | You check `/cost` and see $45 | Warned at 50%, 80%, and 100% of your budget |
-| **Stuck loops** | Claude retries a failing command 10+ times | Alert after 3 failures: stop and rethink |
-| **Context overflow** | Claude silently forgets early conversation | Warning at 80%, critical at 90% |
-| **Wrong model** | Opus reads files at $5/M tokens | Suggestion to switch to Sonnet, save 70% |
-| **Expensive session** | No pattern visibility across sessions | Alert when a session costs 2x your average |
-| **Blind planning** | Start a 10-task plan with no cost idea | Estimate upfront: "10 tasks x $2.88 = ~$28.80" |
-| **High burn rate** | Spending $0.50+/min without noticing | Alert to slow down and break work into pieces |
-| **Expensive subagents** | No idea which agent cost how much | Per-agent cost breakdown: Explore $0.45, Plan $0.45 |
-| **Stale context** | High context + idle = wasted tokens on restart | Prompt to start a fresh session |
+> **Windows/Linux without Homebrew?** See [other install options](#installation).
 
 ---
 
-## How alerts work
+## What you see
 
-Every alert appears **as a system reminder inside your conversation**. Both you and Claude see it. Claude can react to it — for example, switching to a cheaper approach after a budget warning.
+### Session pulse
 
-This works because claude-status uses Claude Code's `PostToolUse` hooks, which run after every tool call. There's no polling, no background process, and no data leaves your machine.
+A compact summary appears every 3 interactions (configurable). Here's what each part means:
 
-### Works in every environment
-
-Hooks are part of Claude Code's core engine, not the IDE. Alerts work identically in:
-
-- **Claude Code CLI** (terminal)
-- **VS Code** (Claude Code extension)
-- **Cursor**
-- **JetBrains** (IntelliJ, WebStorm, etc.)
-
-If Claude Code runs there, claude-status works there.
-
----
-
-## Alert reference
-
-### 1. Budget alerts
-
-Set a daily limit. Get warned at three thresholds.
-
-```bash
-claude-status budget 20         # alerts at $10, $16, and $20
-claude-status budget --session 5  # per-session limit too
+```
+3 tasks, 245K tokens, 32% ctx, 68% cache, +120/-15 lines, 42 calls (2% errors) | top: Bash:15 Read:12 Edit:8, 1x compacted, 45min (0.7% ctx/min)
 ```
 
-> `Budget update: $10.00 spent today (50% of $20 limit).`
->
-> `BUDGET WARNING: Daily spend $16.40 is 82% of your $20 daily limit.`
->
-> `BUDGET EXCEEDED: Daily spend $22.50 has passed your $20 limit.`
+| Metric | What it means | Why it matters |
+|---|---|---|
+| **3 tasks** | Completed plan tasks | Track progress |
+| **245K tokens** | Total tokens consumed | Session size at a glance |
+| **32% ctx** | Context window used | Know when to `/compact` |
+| **68% cache** | Cache hit rate | Higher = faster responses |
+| **+120/-15 lines** | Code added/removed | Productivity signal |
+| **42 calls (2% errors)** | Tool calls and failure rate | Spot stuck loops early |
+| **top: Bash:15 Read:12 Edit:8** | Most used tools | Understand Claude's approach |
+| **1x compacted** | Times `/compact` ran | Memory management awareness |
+| **45min** | Session duration | Time tracking |
+| **0.7% ctx/min** | Context fill speed | Predict when you'll need to compact |
 
-### 2. Loop detection
+Change the pulse frequency:
 
-Three consecutive failures of the same tool trigger an alert. One stuck loop can easily cost $10+.
+```bash
+claude-status budget --pulse 5   # every 5 interactions instead of 3
+```
 
-> `Loop detected: 4 failed Bash calls in a row. Consider explaining the issue instead of retrying.`
+---
 
-### 3. Context watchdog
+## Smart alerts
 
-Adapts to your model — Opus uses a 1M token window, Sonnet/Haiku use 200k. Thresholds fire at the right time regardless of model.
+Alerts only appear when something needs your attention. The rest of the time, claude-status is silent.
+
+### Context watchdog
+
+Adapts to your model automatically. Opus uses 1M tokens, Sonnet/Haiku use 200k.
 
 > `Context window at 80%. Consider using /compact soon.`
 >
 > `CONTEXT CRITICAL (92%): Use /compact NOW or risk losing conversation history.`
 
-### 4. Burn rate warning
+### Loop detection
 
-Detects unsustainable spending velocity.
+Three consecutive failures of the same tool = something's wrong. One stuck loop wastes significant time and tokens.
 
-> `High burn rate: $0.65/min. Consider breaking tasks into smaller pieces.`
+> `Loop detected: 4 failed Bash calls in a row. Consider explaining the issue instead of retrying.`
 
-### 5. Expensive session alert
+### Model suggestion
 
-Compares your current session against the average of your past sessions. Needs 3+ sessions for a baseline.
-
-> `Expensive session: $12.40 is 2.0x your average ($6.20). Consider splitting into smaller tasks.`
-
-### 6. Model downgrade suggestion
-
-When Opus is doing lightweight work (reads, searches, globs), you're overpaying.
+Opus doing lightweight work (reads, searches, globs)? You could be going faster with Sonnet.
 
 > `Light tasks detected (reads/searches). Consider using Sonnet for this work to save ~70% on costs.`
 
-### 7. Idle context warning
+### Idle context warning
 
-High context usage + no activity for 10+ minutes = wasted tokens on the next message.
+High context usage + no activity = wasted tokens on the next message.
 
 > `Context at 75% with 15min idle. Consider starting a new session to save tokens.`
 
-### 8. Plan cost estimation
+### Subagent tracking
 
-When Claude creates a plan with 3+ tasks, you get an instant cost estimate based on your historical average cost per task.
-
-> `Plan estimate: 5 tasks x $2.88 avg = ~$14.40. Budget remaining: $25.60. This plan fits within your daily limit.`
-
-> `Plan estimate: 8 tasks x $2.88 avg = ~$23.04. WARNING: This may exceed your remaining budget ($15.00). Consider splitting into phases or using Sonnet.`
-
-Accuracy improves as you complete more tasks. Needs 2+ completed tasks for the first estimate.
-
-### 9. Session pulse
-
-A brief session summary appears every 3 tool calls so you always know where you stand.
-
-**API mode** (pay-per-token):
-> `Session: $4.50 spent, 32% context, $0.45/min.`
-
-**Pro mode** (subscription — Pro/Max/Team):
-> `3 tasks, 245K tokens, 32% ctx, 68% cache, +120/-15 lines, 42 calls (2% errors) | top: Bash:15 Read:12 Edit:8, 1x compacted, 45min (0.7% ctx/min)`
-
-Pro mode is the default — no configuration needed. If you use the API directly (pay-per-token), switch to API mode for cost tracking:
-
-```bash
-claude-status budget --plan api   # enable cost alerts
-claude-status budget 20           # set $20/day limit
-claude-status budget --pulse 5    # change pulse frequency (default: 3)
-```
-
-### 10. Subagent cost tracking
-
-When Claude spawns subagents (Explore, Plan, general-purpose), each one's cost is tracked individually. See exactly where your tokens go.
+When Claude spawns subagents (Explore, Plan, general-purpose), each one's cost and token usage is tracked individually.
 
 > `Expensive subagent: Explore cost $3.45. Consider using Sonnet for this type of work.`
 
-The TUI dashboard shows a breakdown:
+---
 
+## API mode (pay-per-token)
+
+If you use the Claude API directly instead of a subscription, switch to API mode for cost-focused alerts:
+
+```bash
+claude-status budget --plan api
+claude-status budget 20             # $20/day limit
+claude-status budget --session 5    # $5/session limit
 ```
-Subagents (3)  Total: $1.2300
-  ▸ Explore    $0.4500  Sonnet
-  ▸ Explore    $0.3300  Sonnet
-  ▸ Plan       $0.4500  Opus
+
+API mode adds:
+
+| Alert | What it does |
+|---|---|
+| **Budget alerts** | Warns at 50%, 80%, 100% of daily/session limit |
+| **Burn rate** | Alerts when spending > $0.50/min |
+| **Session comparison** | Alerts when a session costs 2x your average |
+| **Plan estimation** | Estimates cost before executing a multi-task plan |
+| **Cost pulse** | Shows `$4.50 spent, 32% context, $0.45/min` instead of productivity metrics |
+
+Switch back anytime:
+
+```bash
+claude-status budget --plan pro   # back to productivity mode (default)
 ```
 
 ---
@@ -223,42 +190,53 @@ claude-status report --week
 
 ### TUI dashboard
 
-Run `claude-status` with no arguments for a live terminal dashboard:
-
-- Budget progress bar with remaining amount
-- Context window usage (model-aware)
-- Token breakdown with cache hit rate
-- Per-task cost when using plans
-- Optimization tips
+Run `claude-status` with no arguments for a live terminal dashboard with budget progress, context bar, token breakdown, per-task costs, subagent breakdown, and optimization tips.
 
 ---
 
-## Architecture
+## Works everywhere
+
+Hooks are part of Claude Code's core engine, not the IDE. Everything works identically in:
+
+- **Claude Code CLI** (terminal)
+- **VS Code** (Claude Code extension)
+- **Cursor**
+- **JetBrains** (IntelliJ, WebStorm, etc.)
+- **Windows** (Git Bash or WSL)
+
+If Claude Code runs there, claude-status works there.
+
+---
+
+## How it works
 
 ```
-Claude Code tool call
-       |
-       v
-snapshot-hook.sh runs (< 50ms)
-       |
-       v
-Reads native session data, computes cost, checks 10 alert conditions
-       |
-       v
-Threshold crossed?  -->  Alert injected into conversation
-Nothing wrong?      -->  Silent, zero interruption
+You use Claude Code normally
+         |
+         v
+Hooks run automatically after each response (< 50ms)
+         |
+         v
+Read session data, compute metrics, check alert conditions
+         |
+         v
+Every N responses  -->  Pulse with session metrics
+Alert triggered?   -->  Warning appears in conversation
+Nothing wrong?     -->  Silent, zero interruption
 ```
 
-No background processes. No external API calls. All data stays in `~/.claude-status/`.
+**Zero background processes. Zero network calls. All data stays in `~/.claude-status/`.**
 
-Three hooks handle everything:
+Six hooks handle everything:
 
-| Hook | Role |
-|------|------|
-| **snapshot-hook.sh** | Reads session data, computes cost, runs all alert checks, outputs warnings |
-| **task-hook.sh** | Tracks per-task cost and estimates plan cost when using TodoWrite |
-| **subagent-hook.sh** | Calculates per-subagent cost from transcript on SubagentStop |
-| **status-line.sh** | Rich status bar with cost, tokens, context, current task, and subagent count |
+| Hook | Event | Role |
+|------|-------|------|
+| **snapshot-hook.sh** | PostToolUse | Reads session data, computes cost, tracks tool usage, runs alert checks |
+| **pulse-hook.sh** | Stop | Shows periodic session pulse after every N responses |
+| **task-hook.sh** | PostToolUse | Tracks per-task cost and estimates plan cost |
+| **subagent-hook.sh** | SubagentStop | Calculates per-subagent cost from transcript |
+| **compact-hook.sh** | PostCompact | Tracks compaction events |
+| **status-line.sh** | Notification | Rich terminal status bar with live metrics |
 
 ---
 
@@ -267,14 +245,17 @@ Three hooks handle everything:
 | Command | What it does |
 |---------|-------------|
 | `claude-status` | Live TUI dashboard |
-| `claude-status budget 20` | Set $20/day daily limit |
-| `claude-status budget --session 5` | Set $5/session limit |
-| `claude-status budget` | Show current budget |
+| `claude-status budget` | Show current settings |
+| `claude-status budget --plan api` | Switch to API cost mode |
+| `claude-status budget --plan pro` | Switch to productivity mode (default) |
+| `claude-status budget 20` | Set $20/day limit (API mode) |
+| `claude-status budget --session 5` | Set $5/session limit (API mode) |
+| `claude-status budget --pulse 5` | Pulse every 5 interactions |
 | `claude-status budget 0` | Disable budget |
 | `claude-status report` | Today's spending report |
 | `claude-status report --week` | This week's spending report |
 | `claude-status history` | All past sessions |
-| `claude-status install` | Set up hooks (automatic with Homebrew) |
+| `claude-status install` | Set up hooks |
 | `claude-status update` | Upgrade and refresh hooks |
 | `claude-status uninstall` | Clean removal |
 
@@ -282,7 +263,7 @@ Three hooks handle everything:
 
 ## Installation
 
-### Option 1: Homebrew (recommended)
+### Homebrew (recommended)
 
 ```bash
 brew install claude-status
@@ -290,14 +271,14 @@ brew install claude-status
 
 Hooks configure automatically. Just restart Claude Code.
 
-### Option 2: Go install
+### Go install
 
 ```bash
 go install github.com/oscarangulo/claude-status/cmd/claude-status@latest
 claude-status install
 ```
 
-### Option 3: Download binary
+### Download binary
 
 Grab the latest from [Releases](https://github.com/oscarangulo/claude-status/releases):
 
@@ -315,7 +296,7 @@ chmod +x claude-status
 ./claude-status install
 ```
 
-### Option 4: From source
+### From source
 
 ```bash
 git clone https://github.com/oscarangulo/claude-status.git
@@ -332,6 +313,31 @@ claude-status install
 
 ---
 
+## FAQ
+
+**Does it slow down Claude Code?**
+No. Each hook runs in under 50ms. You won't notice it.
+
+**Does it send my data anywhere?**
+No. Everything stays in `~/.claude-status/`. Zero network calls.
+
+**What plan mode should I use?**
+If you're on Claude Pro, Max, or Team — use the default (pro mode). If you pay per token via the API, switch to `--plan api` for cost tracking.
+
+**Can I change how often the pulse appears?**
+Yes. `claude-status budget --pulse 5` shows it every 5 interactions. Default is 3.
+
+**Does it work on Windows?**
+Yes. Install via `go install` or download the binary. Hooks use bash and awk, both included in Git Bash.
+
+**How do I update?**
+`claude-status update` or `brew upgrade claude-status`.
+
+**How do I remove it?**
+`claude-status uninstall` — choose to remove hooks only, hooks + data, or everything.
+
+---
+
 ## Pricing reference
 
 Cost is computed using official Anthropic pricing (per million tokens):
@@ -342,7 +348,7 @@ Cost is computed using official Anthropic pricing (per million tokens):
 | **Sonnet 4.6** | $3.00 | $15.00 | $0.30 | $3.75 |
 | **Haiku 4.5** | $1.00 | $5.00 | $0.10 | $1.25 |
 
-Context window sizes used for percentage calculation:
+Context window sizes:
 
 | Model | Context Window |
 |---|---:|
@@ -352,40 +358,9 @@ Context window sizes used for percentage calculation:
 
 ---
 
-## FAQ
-
-**Does it slow down Claude Code?**
-No. Each hook runs in under 50ms. You won't notice it.
-
-**Does it send my data anywhere?**
-No. Everything stays in `~/.claude-status/`. Zero network calls.
-
-**Does it work in VS Code?**
-Yes. Alerts use `PostToolUse` hooks which work in CLI, VS Code, Cursor, and JetBrains.
-
-**Does it work on Windows?**
-Yes. The Go binary and hooks work on Windows with Git Bash or WSL. Install via `go install` or download the binary from Releases.
-
-**Can I use it without setting a budget?**
-Yes. Loop detection, context warnings, model suggestions, burn rate alerts, and plan estimation all work without a budget.
-
-**How accurate is plan cost estimation?**
-It uses your historical average cost per completed task. After 10+ tasks, estimates are typically within 20% of actual cost.
-
-**How do I update?**
-`claude-status update` or `brew upgrade claude-status`.
-
-**How do I remove it?**
-`claude-status uninstall` gives you options: remove hooks only, hooks + data, or everything.
-
----
-
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Help wanted:
-
-- Windows testing ([#3](https://github.com/oscarangulo/claude-status/issues/3))
-- Per-subagent cost tracking ([#4](https://github.com/oscarangulo/claude-status/issues/4))
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
