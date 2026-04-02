@@ -127,6 +127,32 @@ if [ "$PLAN_MODE" = "pro" ]; then
     PARTS="$PARTS, ${DURATION_MIN}min (${CTX_VEL}% ctx/min)"
   fi
 
+  # --- SMART TIP (one per pulse, only when actionable) ---
+  TIP=""
+  if [ "$NEW_CTX" -ge 60 ] && [ "$COMPACTIONS" -eq 0 ]; then
+    TIP="Tip: Consider /compact to free context."
+  elif [ "$CACHE_HIT" -gt 0 ] && [ "$CACHE_HIT" -lt 30 ] && [ "$TOTAL_CALLS" -ge 5 ]; then
+    TIP="Tip: Low cache — try consistent, structured prompts."
+  elif [ "$TOTAL_CALLS" -ge 5 ] && [ "$TOTAL_ERRORS" -gt 0 ]; then
+    ERR_CHECK=$(awk "BEGIN{printf \"%d\", $TOTAL_ERRORS * 100 / $TOTAL_CALLS}" 2>/dev/null)
+    if [ "$ERR_CHECK" -ge 10 ]; then
+      TIP="Tip: ${ERR_CHECK}% error rate — try explaining the problem differently."
+    fi
+  elif [ "$DURATION_MIN" -gt 0 ] && [ "$NEW_CTX" -gt 0 ]; then
+    VEL_CHECK=$(awk "BEGIN{v=$NEW_CTX / $DURATION_MIN; print (v > 1.0) ? 1 : 0}" 2>/dev/null)
+    if [ "$VEL_CHECK" = "1" ]; then
+      TIP="Tip: Context filling fast — break work into smaller sessions."
+    fi
+  elif [ "$TOTAL_CALLS" -ge 50 ] && [ "$TASK_COUNT" -eq 0 ]; then
+    TIP="Tip: Long session with no plan — consider using tasks for structure."
+  elif [ "$CACHE_HIT" -ge 80 ]; then
+    TIP="Great cache reuse — your prompts are well structured."
+  fi
+
+  if [ -n "$TIP" ]; then
+    PARTS="$PARTS. $TIP"
+  fi
+
   ALERT="$PARTS"
 else
   # --- API MODE ---

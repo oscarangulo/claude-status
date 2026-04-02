@@ -75,6 +75,16 @@ A compact summary appears every 3 interactions (configurable). Here's what each 
 | **45min** | Session duration | Time tracking |
 | **0.7% ctx/min** | Context fill speed | Predict when you'll need to compact |
 
+When something is actionable, the pulse includes a contextual tip:
+
+> `245K tokens, 62% ctx, 45% cache, 12 calls. Tip: Consider /compact to free context.`
+
+> `80K tokens, 15% ctx, 12% cache, 8 calls. Tip: Low cache — try consistent, structured prompts.`
+
+> `500K tokens, 40% ctx, 92% cache, 50 calls. Great cache reuse — your prompts are well structured.`
+
+Tips only appear when relevant — not every pulse.
+
 Change the pulse frequency:
 
 ```bash
